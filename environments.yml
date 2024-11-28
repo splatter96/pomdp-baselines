@@ -212,7 +212,7 @@ dependencies:
   - google-auth-oauthlib==0.4.2
   - google-pasta==0.2.0
   - grpcio==1.32.0
-  - gym==0.21.0
+  - gym==0.24.0
   - h5py==2.10.0
   - huggingface-hub==0.0.8
   - imageio==2.9.0
@@ -288,5 +288,5 @@ dependencies:
   - typing-extensions==4.1.1
   - werkzeug==1.0.1
   - wrapt==1.12.1
-name: pomdp
+name: pomdp_custom
 prefix: /home/mila/t/tianwei.ni/.conda/envs/pomdp

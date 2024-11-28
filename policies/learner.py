@@ -102,7 +102,7 @@ class Learner:
             "credit",
         ]:  # pomdp/mdp task, using pomdp wrapper
             import envs.pomdp
-            import envs.credit_assign
+            #import envs.credit_assign
 
             assert num_eval_tasks > 0
             self.train_env = gym.make(env_name)

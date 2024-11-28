@@ -10,7 +10,7 @@ import gym
 import numpy as np
 from utils import helpers as utl
 from torchkit import pytorch_utils as ptu
-from sklearn.manifold import TSNE
+#from sklearn.manifold import TSNE
 import seaborn as sns
 import pandas as pd
 import pylab as pl
