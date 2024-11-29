@@ -17,3 +17,14 @@ scripts/tmp_configs/
 *.sif
 
 third_party/
+
+env/
+
+*.so
+*.sw*
+
+highway-env/build
+
+*.html
+
+*.c
