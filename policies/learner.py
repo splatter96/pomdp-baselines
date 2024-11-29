@@ -68,7 +68,10 @@ class Learner:
             "credit",
         ]:  # pomdp/mdp task, using pomdp wrapper
             import envs.pomdp
+
             # import envs.credit_assign
+            sys.path.append("./highway-env/")
+            import highway_env
 
             assert num_eval_tasks > 0
             print(f"initializing {env_name}")
@@ -116,7 +119,12 @@ class Learner:
             self.act_continuous = False
 
         # TODO account for not flattened observations
-        self.obs_dim = self.train_env.observation_space.shape[0]  # include 1-dim done
+        obs_space = self.train_env.observation_space.shape
+        if len(obs_space) == 2:
+            self.obs_dim = obs_space[0] * obs_space[1]
+        else:
+            self.obs_dim = obs_space[0]
+
         logger.log("obs_dim", self.obs_dim, "act_dim", self.act_dim)
 
     def init_agent(
@@ -327,6 +335,8 @@ class Learner:
 
             obs = ptu.from_numpy(self.train_env.reset()[0])  # reset
 
+            # TODO create more universal preprocessor for observations
+            obs = obs.flatten()
             obs = obs.reshape(1, obs.shape[-1])
             done_rollout = False
 
@@ -372,6 +382,7 @@ class Learner:
                 next_obs, reward, done, info = utl.env_step(
                     self.train_env, action.squeeze(dim=0)
                 )
+
                 if self.reward_clip and self.env_type == "atari":
                     reward = torch.tanh(reward)
 

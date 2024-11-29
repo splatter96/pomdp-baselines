@@ -11,7 +11,7 @@ class SeqReplayBuffer:
         action_dim,
         sampled_seq_len: int,
         sample_weight_baseline: float,
-        **kwargs
+        **kwargs,
     ):
         """
         this buffer is used for sequence/trajectory/episode:

@@ -49,6 +49,9 @@ def env_step(env, action):
         action = np.argmax(action)  # one-hot to int
     next_obs, reward, done, _, info = env.step(action)
 
+    # TODO add more general observation preprocessor
+    next_obs = next_obs.flatten()
+
     # move to torch
     next_obs = ptu.from_numpy(next_obs).view(-1, next_obs.shape[0])
     reward = ptu.FloatTensor([reward]).view(-1, 1)
