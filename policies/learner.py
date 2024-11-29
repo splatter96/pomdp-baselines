@@ -498,7 +498,8 @@ class Learner:
             step = 0
 
             obs = ptu.from_numpy(self.eval_env.reset()[0])  # reset
-
+                   
+            obs = obs.flatten()
             obs = obs.reshape(1, obs.shape[-1])
 
             if self.agent_arch == AGENT_ARCHS.Memory:
