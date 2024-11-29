@@ -183,6 +183,7 @@ class Learner:
         sampled_seq_len=None,
         sample_weight_baseline=None,
         buffer_type=None,
+        target_update_interval=None,
         **kwargs,
     ):
         if num_updates_per_iter is None:
@@ -192,6 +193,11 @@ class Learner:
         )
         # if int, it means absolute value; if float, it means the multiplier of collected env steps
         self.num_updates_per_iter = num_updates_per_iter
+
+        if target_update_interval is None:
+            self.target_update_interval = 1
+        else:
+            self.target_update_interval = target_update_interval
 
         if self.agent_arch == AGENT_ARCHS.Markov:
             self.policy_storage = SimpleReplayBuffer(
@@ -297,6 +303,7 @@ class Learner:
             env_steps = self.collect_rollouts(num_rollouts=self.num_rollouts_per_iter)
             logger.log("env steps", self._n_env_steps_total)
 
+            # TODO only update targets every target_update_interval timesteps
             train_stats = self.update(
                 self.num_updates_per_iter
                 if isinstance(self.num_updates_per_iter, int)
@@ -499,6 +506,7 @@ class Learner:
 
             obs = ptu.from_numpy(self.eval_env.reset()[0])  # reset
 
+            obs = obs.flatten()
             obs = obs.reshape(1, obs.shape[-1])
 
             if self.agent_arch == AGENT_ARCHS.Memory:
