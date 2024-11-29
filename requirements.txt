@@ -14,8 +14,9 @@ future-fstrings==1.2.0
 google-auth==2.36.0
 google-auth-oauthlib==1.0.0
 grpcio==1.67.1
-gym==0.24.1
+gym==0.25.2
 gym-notices==0.0.8
+gymnasium==0.28.1
 idna==3.10
 importlib-metadata==8.5.0
 importlib-resources==6.4.5
