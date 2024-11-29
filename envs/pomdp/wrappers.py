@@ -1,20 +1,27 @@
-import gym
-from gym import spaces
+# import gym
+# from gym import spaces
+# from gym import Wrapper
+
+import gymnasium as gym
 import numpy as np
 
 
-class POMDPWrapper(gym.Wrapper):
+class POMDPWrapper(gym.Env):
     def __init__(self, env, partially_obs_dims: list):
-        super().__init__(env)
+        # super().__init__(env)
+        self.env = env
+
         self.partially_obs_dims = partially_obs_dims
         # can equal to the fully-observed env
-        assert 0 < len(self.partially_obs_dims) <= self.observation_space.shape[0]
+        assert 0 < len(self.partially_obs_dims) <= self.env.observation_space.shape[0]
 
-        self.observation_space = spaces.Box(
-            low=self.observation_space.low[self.partially_obs_dims],
-            high=self.observation_space.high[self.partially_obs_dims],
+        self.observation_space = gym.spaces.Box(
+            low=self.env.observation_space.low[self.partially_obs_dims],
+            high=self.env.observation_space.high[self.partially_obs_dims],
             dtype=np.float32,
         )
+
+        self.action_space = self.env.action_space
 
         if self.env.action_space.__class__.__name__ == "Box":
             self.act_continuous = True
@@ -46,9 +53,9 @@ class POMDPWrapper(gym.Wrapper):
 
 
 if __name__ == "__main__":
-    import envs
+    import env.pomdp
 
-    env = gym.make("HopperBLT-F-v0")
+    env = gym.make("CartPole-P-v0")
     obs = env.reset()
     done = False
     step = 0

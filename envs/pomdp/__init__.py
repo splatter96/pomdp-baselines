@@ -1,5 +1,8 @@
-from gym.envs.registration import register
-import gym
+# from gym.envs.registration import register
+from gymnasium.envs.registration import register
+
+# import gym
+import gymnasium as gym
 
 # Notation:
 # F: full observed (original env)

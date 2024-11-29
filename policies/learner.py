@@ -6,7 +6,9 @@ import math
 import numpy as np
 import torch
 from torch.nn import functional as F
-import gym
+
+# import gym
+import gymnasium as gym
 
 from .models import AGENT_CLASSES, AGENT_ARCHS
 from torchkit.networks import ImageEncoder
@@ -48,9 +50,8 @@ class Learner:
         num_eval_tasks=None,
         eval_envs=None,
         worst_percentile=None,
-        **kwargs
+        **kwargs,
     ):
-
         # initialize environment
         assert env_type in [
             "meta",
@@ -62,55 +63,21 @@ class Learner:
         ]
         self.env_type = env_type
 
-        if self.env_type == "meta":  # meta tasks: using varibad wrapper
-            from envs.meta.make_env import make_env
-
-            self.train_env = make_env(
-                env_name,
-                max_rollouts_per_task,
-                seed=self.seed,
-                n_tasks=num_tasks,
-                **kwargs,
-            )  # oracle in kwargs
-            self.eval_env = self.train_env
-            self.eval_env.seed(self.seed + 1)
-
-            if self.train_env.n_tasks is not None:
-                # NOTE: This is off-policy varibad's setting, i.e. limited training tasks
-                # split to train/eval tasks
-                assert num_train_tasks >= num_eval_tasks > 0
-                shuffled_tasks = np.random.permutation(
-                    self.train_env.unwrapped.get_all_task_idx()
-                )
-                self.train_tasks = shuffled_tasks[:num_train_tasks]
-                self.eval_tasks = shuffled_tasks[-num_eval_tasks:]
-            else:
-                # NOTE: This is on-policy varibad's setting, i.e. unlimited training tasks
-                assert num_tasks == num_train_tasks == None
-                assert (
-                    num_eval_tasks > 0
-                )  # to specify how many tasks to be evaluated each time
-                self.train_tasks = []
-                self.eval_tasks = num_eval_tasks * [None]
-
-            # calculate what the maximum length of the trajectories is
-            self.max_rollouts_per_task = max_rollouts_per_task
-            self.max_trajectory_len = self.train_env.horizon_bamdp  # H^+ = k * H
-
-        elif self.env_type in [
+        if self.env_type in [
             "pomdp",
             "credit",
         ]:  # pomdp/mdp task, using pomdp wrapper
             import envs.pomdp
-            #import envs.credit_assign
+            # import envs.credit_assign
 
             assert num_eval_tasks > 0
+            print(f"initializing {env_name}")
             self.train_env = gym.make(env_name)
-            self.train_env.seed(self.seed)
-            self.train_env.action_space.np_random.seed(self.seed)  # crucial
+            # self.train_env.seed(self.seed)
+            # self.train_env.action_space.np_random.seed(self.seed)  # crucial
 
             self.eval_env = self.train_env
-            self.eval_env.seed(self.seed + 1)
+            # self.eval_env.seed(self.seed + 1)
 
             self.train_tasks = []
             self.eval_tasks = num_eval_tasks * [None]
@@ -135,63 +102,6 @@ class Learner:
             self.max_rollouts_per_task = 1
             self.max_trajectory_len = self.train_env._max_episode_steps
 
-        elif self.env_type == "rmdp":  # robust mdp task, using robust mdp wrapper
-            sys.path.append("envs/rl-generalization")
-            import sunblaze_envs
-
-            assert (
-                num_eval_tasks > 0 and worst_percentile > 0.0 and worst_percentile < 1.0
-            )
-            self.train_env = sunblaze_envs.make(env_name, **kwargs)  # oracle
-            self.train_env.seed(self.seed)
-            assert np.all(self.train_env.action_space.low == -1)
-            assert np.all(self.train_env.action_space.high == 1)
-
-            self.eval_env = self.train_env
-            self.eval_env.seed(self.seed + 1)
-
-            self.worst_percentile = worst_percentile
-
-            self.train_tasks = []
-            self.eval_tasks = num_eval_tasks * [None]
-
-            self.max_rollouts_per_task = 1
-            self.max_trajectory_len = self.train_env._max_episode_steps
-
-        elif self.env_type == "generalize":
-            sys.path.append("envs/rl-generalization")
-            import sunblaze_envs
-
-            self.train_env = sunblaze_envs.make(env_name, **kwargs)  # oracle in kwargs
-            self.train_env.seed(self.seed)
-            assert np.all(self.train_env.action_space.low == -1)
-            assert np.all(self.train_env.action_space.high == 1)
-
-            def check_env_class(env_name):
-                if "Normal" in env_name:
-                    return "R"
-                if "Extreme" in env_name:
-                    return "E"
-                return "D"
-
-            self.train_env_name = check_env_class(env_name)
-
-            self.eval_envs = {}
-            for env_name, num_eval_task in eval_envs.items():
-                eval_env = sunblaze_envs.make(env_name, **kwargs)  # oracle in kwargs
-                eval_env.seed(self.seed + 1)
-                self.eval_envs[eval_env] = (
-                    check_env_class(env_name),
-                    num_eval_task,
-                )  # several types of evaluation envs
-
-            logger.log(self.train_env_name, self.train_env)
-            logger.log(self.eval_envs)
-
-            self.train_tasks = []
-            self.max_rollouts_per_task = 1
-            self.max_trajectory_len = self.train_env._max_episode_steps
-
         else:
             raise ValueError
 
@@ -204,6 +114,8 @@ class Learner:
             assert self.train_env.action_space.__class__.__name__ == "Discrete"
             self.act_dim = self.train_env.action_space.n
             self.act_continuous = False
+
+        # TODO account for not flattened observations
         self.obs_dim = self.train_env.observation_space.shape[0]  # include 1-dim done
         logger.log("obs_dim", self.obs_dim, "act_dim", self.act_dim)
 
@@ -213,7 +125,7 @@ class Learner:
         separate: bool = True,
         image_encoder=None,
         reward_clip=False,
-        **kwargs
+        **kwargs,
     ):
         # initialize agent
         if seq_model == "mlp":
@@ -263,9 +175,8 @@ class Learner:
         sampled_seq_len=None,
         sample_weight_baseline=None,
         buffer_type=None,
-        **kwargs
+        **kwargs,
     ):
-
         if num_updates_per_iter is None:
             num_updates_per_iter = 1.0
         assert isinstance(num_updates_per_iter, int) or isinstance(
@@ -323,9 +234,8 @@ class Learner:
         log_tensorboard,
         eval_stochastic=False,
         num_episodes_per_task=1,
-        **kwargs
+        **kwargs,
     ):
-
         self.log_interval = log_interval
         self.save_interval = save_interval
         self.log_tensorboard = log_tensorboard
@@ -572,7 +482,6 @@ class Learner:
 
     @torch.no_grad()
     def evaluate(self, tasks, deterministic=True):
-
         num_episodes = self.max_rollouts_per_task  # k
         # max_trajectory_len = k*H
         returns_per_episode = np.zeros((len(tasks), num_episodes))
@@ -807,15 +716,15 @@ class Learner:
                         eval_num_episodes_per_task * [None],
                         deterministic=deterministic,
                     )
-                    returns_eval[
-                        self.train_env_name + env_name + suffix
-                    ] = return_eval.squeeze(-1)
-                    success_rate_eval[
-                        self.train_env_name + env_name + suffix
-                    ] = success_eval
-                    total_steps_eval[
-                        self.train_env_name + env_name + suffix
-                    ] = total_step_eval
+                    returns_eval[self.train_env_name + env_name + suffix] = (
+                        return_eval.squeeze(-1)
+                    )
+                    success_rate_eval[self.train_env_name + env_name + suffix] = (
+                        success_eval
+                    )
+                    total_steps_eval[self.train_env_name + env_name + suffix] = (
+                        total_step_eval
+                    )
 
             for k, v in returns_eval.items():
                 logger.record_tabular(f"metrics/return_eval_{k}", np.mean(v))
