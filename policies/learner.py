@@ -325,11 +325,7 @@ class Learner:
         for idx in range(num_rollouts):
             steps = 0
 
-            if self.env_type == "meta" and self.train_env.n_tasks is not None:
-                task = self.train_tasks[np.random.randint(len(self.train_tasks))]
-                obs = ptu.from_numpy(self.train_env.reset(task=task))  # reset task
-            else:
-                obs = ptu.from_numpy(self.train_env.reset())  # reset
+            obs = ptu.from_numpy(self.train_env.reset()[0])  # reset
 
             obs = obs.reshape(1, obs.shape[-1])
             done_rollout = False
@@ -384,23 +380,12 @@ class Learner:
                 steps += 1
 
                 ## determine terminal flag per environment
-                if self.env_type == "meta" and "is_goal_state" in dir(
-                    self.train_env.unwrapped
-                ):
-                    # NOTE: following varibad practice: for meta env, even if reaching the goal (term=True),
-                    # the episode still continues.
-                    term = self.train_env.unwrapped.is_goal_state()
-                    self._successes_in_buffer += int(term)
-                elif self.env_type == "credit":  # delayed rewards
-                    term = done_rollout
-                else:
-                    # term ignore time-out scenarios, but record early stopping
-                    term = (
-                        False
-                        if "TimeLimit.truncated" in info
-                        or steps >= self.max_trajectory_len
-                        else done_rollout
-                    )
+                # term ignore time-out scenarios, but record early stopping
+                term = (
+                    False
+                    if "TimeLimit.truncated" in info or steps >= self.max_trajectory_len
+                    else done_rollout
+                )
 
                 # add data to policy buffer
                 if self.agent_arch == AGENT_ARCHS.Markov:
@@ -501,11 +486,7 @@ class Learner:
         for task_idx, task in enumerate(tasks):
             step = 0
 
-            if self.env_type == "meta" and self.eval_env.n_tasks is not None:
-                obs = ptu.from_numpy(self.eval_env.reset(task=task))  # reset task
-                observations[task_idx, step, :] = ptu.get_numpy(obs[:obs_size])
-            else:
-                obs = ptu.from_numpy(self.eval_env.reset())  # reset
+            obs = ptu.from_numpy(self.eval_env.reset()[0])  # reset
 
             obs = obs.reshape(1, obs.shape[-1])
 
@@ -597,167 +578,8 @@ class Learner:
         logger.record_tabular("z/rl_steps", self._n_rl_update_steps_total)
 
         # --- evaluation ----
-        if self.env_type == "meta":
-            if self.train_env.n_tasks is not None:
-                (
-                    returns_train,
-                    success_rate_train,
-                    observations,
-                    total_steps_train,
-                ) = self.evaluate(self.train_tasks[: len(self.eval_tasks)])
-            (
-                returns_eval,
-                success_rate_eval,
-                observations_eval,
-                total_steps_eval,
-            ) = self.evaluate(self.eval_tasks)
-            if self.eval_stochastic:
-                (
-                    returns_eval_sto,
-                    success_rate_eval_sto,
-                    observations_eval_sto,
-                    total_steps_eval_sto,
-                ) = self.evaluate(self.eval_tasks, deterministic=False)
 
-            if self.train_env.n_tasks is not None and "plot_behavior" in dir(
-                self.eval_env.unwrapped
-            ):
-                # plot goal-reaching trajs
-                for i, task in enumerate(
-                    self.train_tasks[: min(5, len(self.eval_tasks))]
-                ):
-                    self.eval_env.reset(task=task)  # must have task argument
-                    logger.add_figure(
-                        "trajectory/train_task_{}".format(i),
-                        utl_eval.plot_rollouts(observations[i, :], self.eval_env),
-                    )
-
-                for i, task in enumerate(
-                    self.eval_tasks[: min(5, len(self.eval_tasks))]
-                ):
-                    self.eval_env.reset(task=task)
-                    logger.add_figure(
-                        "trajectory/eval_task_{}".format(i),
-                        utl_eval.plot_rollouts(observations_eval[i, :], self.eval_env),
-                    )
-                    if self.eval_stochastic:
-                        logger.add_figure(
-                            "trajectory/eval_task_{}_sto".format(i),
-                            utl_eval.plot_rollouts(
-                                observations_eval_sto[i, :], self.eval_env
-                            ),
-                        )
-
-            if "is_goal_state" in dir(
-                self.eval_env.unwrapped
-            ):  # goal-reaching success rates
-                # some metrics
-                logger.record_tabular(
-                    "metrics/successes_in_buffer",
-                    self._successes_in_buffer / self._n_env_steps_total,
-                )
-                if self.train_env.n_tasks is not None:
-                    logger.record_tabular(
-                        "metrics/success_rate_train", np.mean(success_rate_train)
-                    )
-                logger.record_tabular(
-                    "metrics/success_rate_eval", np.mean(success_rate_eval)
-                )
-                if self.eval_stochastic:
-                    logger.record_tabular(
-                        "metrics/success_rate_eval_sto", np.mean(success_rate_eval_sto)
-                    )
-
-            for episode_idx in range(self.max_rollouts_per_task):
-                if self.train_env.n_tasks is not None:
-                    logger.record_tabular(
-                        "metrics/return_train_episode_{}".format(episode_idx + 1),
-                        np.mean(returns_train[:, episode_idx]),
-                    )
-                logger.record_tabular(
-                    "metrics/return_eval_episode_{}".format(episode_idx + 1),
-                    np.mean(returns_eval[:, episode_idx]),
-                )
-                if self.eval_stochastic:
-                    logger.record_tabular(
-                        "metrics/return_eval_episode_{}_sto".format(episode_idx + 1),
-                        np.mean(returns_eval_sto[:, episode_idx]),
-                    )
-
-            if self.train_env.n_tasks is not None:
-                logger.record_tabular(
-                    "metrics/total_steps_train", np.mean(total_steps_train)
-                )
-                logger.record_tabular(
-                    "metrics/return_train_total",
-                    np.mean(np.sum(returns_train, axis=-1)),
-                )
-            logger.record_tabular("metrics/total_steps_eval", np.mean(total_steps_eval))
-            logger.record_tabular(
-                "metrics/return_eval_total", np.mean(np.sum(returns_eval, axis=-1))
-            )
-            if self.eval_stochastic:
-                logger.record_tabular(
-                    "metrics/total_steps_eval_sto", np.mean(total_steps_eval_sto)
-                )
-                logger.record_tabular(
-                    "metrics/return_eval_total_sto",
-                    np.mean(np.sum(returns_eval_sto, axis=-1)),
-                )
-
-        elif self.env_type == "generalize":
-            returns_eval, success_rate_eval, total_steps_eval = {}, {}, {}
-            for env, (env_name, eval_num_episodes_per_task) in self.eval_envs.items():
-                self.eval_env = env  # assign eval_env, not train_env
-                for suffix, deterministic in zip(["", "_sto"], [True, False]):
-                    if deterministic == False and self.eval_stochastic == False:
-                        continue
-                    return_eval, success_eval, _, total_step_eval = self.evaluate(
-                        eval_num_episodes_per_task * [None],
-                        deterministic=deterministic,
-                    )
-                    returns_eval[self.train_env_name + env_name + suffix] = (
-                        return_eval.squeeze(-1)
-                    )
-                    success_rate_eval[self.train_env_name + env_name + suffix] = (
-                        success_eval
-                    )
-                    total_steps_eval[self.train_env_name + env_name + suffix] = (
-                        total_step_eval
-                    )
-
-            for k, v in returns_eval.items():
-                logger.record_tabular(f"metrics/return_eval_{k}", np.mean(v))
-            for k, v in success_rate_eval.items():
-                logger.record_tabular(f"metrics/succ_eval_{k}", np.mean(v))
-            for k, v in total_steps_eval.items():
-                logger.record_tabular(f"metrics/total_steps_eval_{k}", np.mean(v))
-
-        elif self.env_type == "rmdp":
-            returns_eval, _, _, total_steps_eval = self.evaluate(self.eval_tasks)
-            returns_eval = returns_eval.squeeze(-1)
-            # np.quantile is introduced in np v1.15, so we have to use np.percentile
-            cutoff = np.percentile(returns_eval, 100 * self.worst_percentile)
-            worst_indices = np.where(
-                returns_eval <= cutoff
-            )  # must be "<=" to avoid empty set
-            returns_eval_worst, total_steps_eval_worst = (
-                returns_eval[worst_indices],
-                total_steps_eval[worst_indices],
-            )
-
-            logger.record_tabular("metrics/return_eval_avg", returns_eval.mean())
-            logger.record_tabular(
-                "metrics/return_eval_worst", returns_eval_worst.mean()
-            )
-            logger.record_tabular(
-                "metrics/total_steps_eval_avg", total_steps_eval.mean()
-            )
-            logger.record_tabular(
-                "metrics/total_steps_eval_worst", total_steps_eval_worst.mean()
-            )
-
-        elif self.env_type in ["pomdp", "credit", "atari"]:
+        if self.env_type in ["pomdp", "credit", "atari"]:
             returns_eval, success_rate_eval, _, total_steps_eval = self.evaluate(
                 self.eval_tasks
             )
@@ -803,12 +625,7 @@ class Learner:
 
         logger.dump_tabular()
 
-        if self.env_type == "generalize":
-            return sum([v.mean() for v in success_rate_eval.values()]) / len(
-                success_rate_eval
-            )
-        else:
-            return np.mean(np.sum(returns_eval, axis=-1))
+        return np.mean(np.sum(returns_eval, axis=-1))
 
     def save_model(self, iter, perf):
         save_path = os.path.join(

@@ -25,11 +25,6 @@ flags.DEFINE_float("entropy_alpha", None, "for [sac, sacd]")
 
 flags.DEFINE_integer("seed", None, "seed")
 flags.DEFINE_integer("cuda", None, "cuda device id")
-flags.DEFINE_boolean(
-    "oracle",
-    False,
-    "whether observe the privileged information of POMDP, reduced to MDP",
-)
 flags.DEFINE_boolean("debug", False, "debug mode")
 
 flags.FLAGS(sys.argv)
@@ -57,8 +52,6 @@ if FLAGS.seed is not None:
     v["seed"] = FLAGS.seed
 if FLAGS.cuda is not None:
     v["cuda"] = FLAGS.cuda
-if FLAGS.oracle:
-    v["env"]["oracle"] = True
 
 # system: device, threads, seed, pid
 seed = v["seed"]
@@ -90,20 +83,9 @@ else:
     env_name = v["env"]["env_name"]
 exp_id += f"{env_type}/{env_name}/"
 
-if "oracle" in v["env"] and v["env"]["oracle"] == True:
-    oracle = True
-else:
-    oracle = False
-
 if seq_model == "mlp":
-    if oracle:
-        algo_name = f"oracle_{algo}"
-    else:
-        algo_name = f"Markovian_{algo}"
-    exp_id += algo_name
+    algo_name = f"Markovian_{algo}"
 else:  # rnn
-    if oracle:
-        exp_id += "oracle_"
     if "rnn_num_layers" in v["policy"]:
         rnn_num_layers = v["policy"]["rnn_num_layers"]
         if rnn_num_layers == 1:

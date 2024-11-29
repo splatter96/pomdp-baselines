@@ -35,8 +35,8 @@ class POMDPWrapper(gym.Env):
         return state[self.partially_obs_dims].copy()
 
     def reset(self):
-        state = self.env.reset()  # no kwargs
-        return self.get_obs(state)
+        state, info = self.env.reset()  # no kwargs
+        return self.get_obs(state), info
 
     def step(self, action):
         if self.act_continuous:
@@ -47,9 +47,9 @@ class POMDPWrapper(gym.Env):
             action = lb + (action + 1.0) * 0.5 * (ub - lb)
             action = np.clip(action, lb, ub)
 
-        state, reward, done, info = self.env.step(action)
+        state, reward, done, _, info = self.env.step(action)
 
-        return self.get_obs(state), reward, done, info
+        return self.get_obs(state), reward, done, False, info
 
 
 if __name__ == "__main__":

@@ -47,7 +47,7 @@ def env_step(env, action):
     action = ptu.get_numpy(action)
     if env.action_space.__class__.__name__ == "Discrete":
         action = np.argmax(action)  # one-hot to int
-    next_obs, reward, done, info = env.step(action)
+    next_obs, reward, done, _, info = env.step(action)
 
     # move to torch
     next_obs = ptu.from_numpy(next_obs).view(-1, next_obs.shape[0])
@@ -90,7 +90,6 @@ def select_action(
 
 
 def get_augmented_obs(args, obs, posterior_sample=None, task_mu=None, task_std=None):
-
     obs_augmented = obs.clone()
 
     if posterior_sample is None:
@@ -115,7 +114,6 @@ def get_augmented_obs(args, obs, posterior_sample=None, task_mu=None, task_std=N
 
 
 def update_encoding(encoder, obs, action, reward, done, hidden_state):
-
     # reset hidden state of the recurrent net when we reset the task
     if done is not None:
         hidden_state = encoder.reset_hidden(hidden_state, done)
