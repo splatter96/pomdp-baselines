@@ -21,8 +21,6 @@ importlib-metadata==8.5.0
 importlib-resources==6.4.5
 jinja2==3.1.4
 kiwisolver==1.4.7
-libsumo==1.15.0.post2
-libtraci==1.15.0.post2
 lit==18.1.8
 Markdown==3.7
 MarkupSafe==2.1.5
@@ -72,12 +70,10 @@ ruamel.yaml==0.18.6
 ruamel.yaml.clib==0.2.8
 seaborn==0.13.2
 six==1.16.0
-sumolib==1.15.0.post2
 sympy==1.13.3
 tensorboard==2.14.0
 tensorboard-data-server==0.7.2
 torch==2.0.1
-traci==1.15.0.post2
 triton==2.0.0
 typing-extensions==4.12.2
 tzdata==2024.2
