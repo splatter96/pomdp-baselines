@@ -6,6 +6,19 @@ env:
 
   num_eval_tasks: 20 # num of eval episodes
 
+  duration: 15
+  policy_frequency: 5
+  merging_speed_reward: -0.5
+  right_lane_reward: 0.1
+  lane_change_reward: -0.05
+  reward_speed_range: [10, 30]
+  collision_reward: 200
+  high_speed_reward: 1
+  safety_guarantee: false
+  traffic_density: 3
+  offramp_reward: 100
+
+
 train:
   # 500*200 = 100k steps
   num_iters: 500 # number meta-training iterates

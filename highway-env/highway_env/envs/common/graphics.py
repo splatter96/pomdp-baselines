@@ -3,7 +3,6 @@ from typing import TYPE_CHECKING, Callable, List
 import numpy as np
 import pygame
 from gymnasium.spaces import Discrete
-import cv2
 
 from highway_env.envs.common.action import ActionType, DiscreteMetaAction, ContinuousAction
 from highway_env.road.graphics import WorldSurface, RoadGraphics
@@ -118,12 +117,6 @@ class EnvViewer(object):
             offscreen=self.offscreen
         )
 
-        RoadGraphics.display_traffic(
-            self.env.road,
-            self.sim_surface,
-            simulation_frequency=self.env.config["simulation_frequency"],
-            offscreen=self.offscreen)
-
         if self.agent_display:
             self.agent_display(self.agent_surface, self.sim_surface)
             if not self.offscreen:
@@ -132,22 +125,16 @@ class EnvViewer(object):
                 else:
                     self.screen.blit(self.agent_surface, (self.env.config["screen_width"], 0))
 
-        ObservationGraphics.display(self.env.observation_type, self.sim_surface)
+        RoadGraphics.display_traffic(
+            self.env.road,
+            self.sim_surface,
+            simulation_frequency=self.env.config["simulation_frequency"],
+            offscreen=self.offscreen)
 
         if not self.offscreen:
             self.screen.blit(self.sim_surface, (0, 0))
             if self.env.config["real_time_rendering"]:
                 self.clock.tick(self.env.config["simulation_frequency"])
-
-            # OpenCV test to project scene
-            """
-            view = pygame.surfarray.array3d(self.sim_surface)
-            view = view.transpose([1, 0, 2])
-            img_bgr = cv2.cvtColor(view, cv2.COLOR_RGB2BGR)
-            cv2.imshow("Simulation",img_bgr)
-            cv2.waitKey(1)
-            """
-
             pygame.display.flip()
 
         if self.SAVE_IMAGES and self.directory:
@@ -218,38 +205,3 @@ class EventHandler(object):
             if event.key == pygame.K_UP and action_type.longitudinal:
                 action[0] = 0
         action_type.act(action)
-
-class ObservationGraphics(object):
-    COLOR = (0, 0, 0)
-
-    @classmethod
-    def display(cls, obs, sim_surface):
-        from highway_env.envs.common.observation import LidarObservation
-
-        if isinstance(obs, LidarObservation):
-            cls.display_grid(obs, sim_surface)
-
-    @classmethod
-    def display_grid(cls, lidar_observation, surface):
-        psi = np.repeat(
-            np.arange(
-                -lidar_observation.angle / 2,
-                2 * np.pi - lidar_observation.angle / 2,
-                2 * np.pi / lidar_observation.grid.shape[0],
-            ),
-            2,
-        )
-        psi = np.hstack((psi[1:], [psi[0]]))
-        r = np.repeat(
-            np.minimum(lidar_observation.grid[:, 0], lidar_observation.maximum_range), 2
-        )
-        points = [
-            (
-                surface.pos2pix(
-                    lidar_observation.origin[0] + r[i] * np.cos(psi[i]),
-                    lidar_observation.origin[1] + r[i] * np.sin(psi[i]),
-                )
-            )
-            for i in range(np.size(psi))
-        ]
-        pygame.draw.lines(surface, ObservationGraphics.COLOR, True, points, 1)

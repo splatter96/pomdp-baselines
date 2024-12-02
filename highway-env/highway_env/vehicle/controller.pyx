@@ -8,7 +8,6 @@ from highway_env.road.road import Road, LaneIndex, Route
 from highway_env.types import Vector
 from highway_env.vehicle.kinematics import Vehicle
 
-from libc.math cimport asin, M_PI
 
 class ControlledVehicle(Vehicle):
     """
@@ -109,7 +108,7 @@ class ControlledVehicle(Vehicle):
 
     def follow_road(self) -> None:
         """At the end of a lane, automatically switch to a next one."""
-        if self.road.network.get_lane(self.target_lane_index).after_end(self.position, vehicle_length=self.LENGTH):
+        if self.road.network.get_lane(self.target_lane_index).after_end(self.position):
             self.target_lane_index = self.road.network.next_lane(self.target_lane_index,
                                                                  route=self.route,
                                                                  position=self.position,
@@ -127,39 +126,26 @@ class ControlledVehicle(Vehicle):
         :param target_lane_index: index of the lane to follow
         :return: a steering wheel angle command [rad]
         """
-
+        cdef float speed = self.speed
         target_lane = self.road.network.get_lane(target_lane_index)
-        return utils.steering_control(self.speed, self.position, self.heading, target_lane, self.PURSUIT_TAU, self.KP_LATERAL, self.KP_HEADING, self.LENGTH, self.MAX_STEERING_ANGLE)
+        lane_coords = target_lane.local_coordinates(self.position)
+        lane_next_coords = lane_coords[0] + speed * self.PURSUIT_TAU
+        cdef float lane_future_heading = target_lane.heading_at(lane_next_coords)
 
-        # cdef float speed = self.speed
+        cdef float lateral_speed_command, heading_command, headin_ref, heading_rate_command, steering_angle
 
-        # cdef float TAU = self.PURSUIT_TAU
-        # cdef float KP = self.KP_LATERAL
-
-        # target_lane = self.road.network.get_lane(target_lane_index)
-        # lane_coords = target_lane.local_coordinates(self.position)
-
-        # cdef float lane_x = lane_coords[0]
-        # cdef float lane_y = lane_coords[1]
-
-        # lane_next_coords = lane_x + speed * TAU
-
-        # cdef float lane_future_heading = target_lane.heading_at(lane_next_coords)
-
-        # cdef float lateral_speed_command, heading_command, headin_ref, heading_rate_command, steering_angle
-
-        # # Lateral position control
-        # lateral_speed_command = -KP * lane_y
-        # # Lateral speed to heading
-        # heading_command = asin(utils.c_clip(lateral_speed_command / utils.c_not_zero(speed), -1, 1))
-        # heading_ref = lane_future_heading + utils.c_clip(heading_command, -np.pi/4, np.pi/4)
-        # # Heading control
-        # heading_rate_command = self.KP_HEADING * utils.wrap_to_pi(heading_ref - self.heading)
-        # # Heading rate to steering angle
-        # steering_angle = asin(utils.c_clip(self.LENGTH / 2 / utils.c_not_zero(speed) * heading_rate_command,
-                                           # -1, 1))
-        # steering_angle = utils.c_clip(steering_angle, -self.MAX_STEERING_ANGLE, self.MAX_STEERING_ANGLE)
-        # return float(steering_angle)
+        # Lateral position control
+        lateral_speed_command = - self.KP_LATERAL * lane_coords[1]
+        # Lateral speed to heading
+        heading_command = np.arcsin(utils.clip(lateral_speed_command / utils.not_zero(speed), -1, 1))
+        heading_ref = lane_future_heading + utils.clip(heading_command, -np.pi/4, np.pi/4)
+        # Heading control
+        heading_rate_command = self.KP_HEADING * utils.wrap_to_pi(heading_ref - self.heading)
+        # Heading rate to steering angle
+        steering_angle = np.arcsin(utils.clip(self.LENGTH / 2 / utils.not_zero(speed) * heading_rate_command,
+                                           -1, 1))
+        steering_angle = utils.clip(steering_angle, -self.MAX_STEERING_ANGLE, self.MAX_STEERING_ANGLE)
+        return float(steering_angle)
 
     def speed_control(self, target_speed: float) -> float:
         """

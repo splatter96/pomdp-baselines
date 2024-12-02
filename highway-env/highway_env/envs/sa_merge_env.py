@@ -5,13 +5,7 @@ from gymnasium.envs.registration import register
 
 from highway_env import utils
 from highway_env.envs.common.abstract import AbstractEnv
-from highway_env.road.lane import (
-    LineType,
-    StraightLane,
-    SineLane,
-    HorizontalLane,
-    DEFAULT_WIDTH,
-)
+from highway_env.road.lane import LineType, StraightLane, SineLane, HorizontalLane
 from highway_env.road.road import Road, RoadNetwork
 from highway_env.vehicle.controller import ControlledVehicle
 from highway_env.vehicle.graphics import VehicleGraphics
@@ -19,7 +13,7 @@ from highway_env.vehicle.graphics import VehicleGraphics
 # from highway_env.vehicle.objects import Obstacle
 from highway_env.road.objects import Obstacle
 
-from highway_env.vehicle.kinematics import Vehicle, RealVehicle
+from highway_env.vehicle.kinematics import Vehicle
 
 
 class SingleAgentMergeEnv(AbstractEnv):
@@ -119,7 +113,7 @@ class SingleAgentMergeEnv(AbstractEnv):
         # return self.vehicle.crashed or self.vehicle.position[0] > 370 #or self.steps >= 200
         return (
             self.vehicle.crashed
-            or self.vehicle.position[0] > 350
+            or self.vehicle.position[0] > 500
             or self.vehicle.lane_index == ("c", "o", 0)
         )  # end the episode if the vehicle drives off ramp
         # return self.vehicle.crashed \
@@ -158,7 +152,7 @@ class SingleAgentMergeEnv(AbstractEnv):
         # self.ends = [150, 80, 40, 40, 150]  # Before, converging, merge, after
 
         c, s, n = LineType.CONTINUOUS_LINE, LineType.STRIPED, LineType.NONE
-        y = [0, DEFAULT_WIDTH]
+        y = [0, StraightLane.DEFAULT_WIDTH]
         line_type = [(c, s), (n, c)]
         line_type_merge = [(c, s), (n, s)]
         for i in range(2):
@@ -256,9 +250,8 @@ class SingleAgentMergeEnv(AbstractEnv):
 
         spawn_points_s1 = [10, 50, 90, 130, 170, 210, 225]
         spawn_points_s2 = [0, 40, 80, 120, 160, 200, 220]
-        # spawn_points_m = [5, 45, 85, 125, 130, 145, 150, 165, 205, 225]
         spawn_points_m = [5, 45, 85, 125, 165, 205, 225]
-        # spawn_points_m_cav = [125, 130, 145, 150, 165]
+        # spawn_points_m = [5, 45, 65, 85, 100, 125]
         spawn_points_m_cav = [125, 165]
 
         # initial speed with noise and location noise
@@ -332,7 +325,6 @@ class SingleAgentMergeEnv(AbstractEnv):
             road.vehicles.append(ego_vehicle)
 
         self.vehicle.color = (200, 0, 150)
-        self.vehicle.id = 0
 
         """Spawn points for HDV"""
         # spawn point indexes on the straight road
@@ -417,20 +409,6 @@ class SingleAgentMergeEnv(AbstractEnv):
             veh.RIGHT_BIAS = -4.0
             veh.color = VehicleGraphics.GREEN
             road.vehicles.append(veh)
-
-        """ create the vehicle from real data """
-        # traj_list = [69, 79, 80, 81, 85, 87, 91, 92, 100, 101, 103, 104, 105, 114, 115, 117, 119, 122, 125, 129, 131]
-        # traj_list = [69, 79, 80, 81, 85, 87, 91, 92, 100, 101, 103, 104, 105, 114, 115, 117, 119, 122, 125, 129, 131, 133, 135, 138, 145, 156, 160]
-        # traj_list = [79, 81, 85, 87,  100, 101, 103, 104, 105, 114, 115, 117, 119, 122, 125, 129, 131, 133, 135, 138, 145, 156, 160]
-        #
-        # start_time = np.random.uniform(10, 20)
-        # for traj in traj_list:
-        #     # v = RealVehicle(f"../traj{traj}.npy", 13.5)
-        #     v = RealVehicle(f"../traj{traj}.npy", start_time)
-        #     v.id = traj
-        #     v.color = VehicleGraphics.BLACK
-        #     road.vehicles.append(v)
-        #
 
 
 register(

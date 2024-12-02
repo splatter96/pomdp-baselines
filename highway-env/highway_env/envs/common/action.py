@@ -3,7 +3,7 @@ from gymnasium import spaces
 import numpy as np
 
 from highway_env import utils
-# from highway_env.vehicle.dynamics import BicycleVehicle
+from highway_env.vehicle.dynamics import BicycleVehicle
 from highway_env.vehicle.kinematics import Vehicle
 from highway_env.vehicle.controller import MDPVehicle
 from highway_env.vehicle.behavior import IDMVehicle
@@ -110,8 +110,7 @@ class ContinuousAction(ActionType):
 
     @property
     def vehicle_class(self) -> Callable:
-        # return Vehicle if not self.dynamical else BicycleVehicle
-        return Vehicle 
+        return Vehicle if not self.dynamical else BicycleVehicle
 
     def act(self, action: np.ndarray) -> None:
         if self.clip:

@@ -90,18 +90,14 @@ class WorldSurface(pygame.Surface):
         :param event: a pygame event
         """
         if event.type == pygame.KEYDOWN:
-            if event.key == pygame.K_PAGEUP:
+            if event.key == pygame.K_l:
                 self.scaling *= 1 / self.SCALING_FACTOR
-            if event.key == pygame.K_PAGEDOWN:
+            if event.key == pygame.K_o:
                 self.scaling *= self.SCALING_FACTOR
-            if event.key == pygame.K_LEFT:
+            if event.key == pygame.K_m:
                 self.centering_position[0] -= self.MOVING_FACTOR
-            if event.key == pygame.K_RIGHT:
+            if event.key == pygame.K_k:
                 self.centering_position[0] += self.MOVING_FACTOR
-            if event.key == pygame.K_UP:
-                self.centering_position[1] -= self.MOVING_FACTOR
-            if event.key == pygame.K_DOWN:
-                self.centering_position[1] += self.MOVING_FACTOR
 
 
 class LaneGraphics(object):
@@ -136,10 +132,10 @@ class LaneGraphics(object):
             elif lane.line_types[side] == LineType.CONTINUOUS_LINE:
                 cls.continuous_line(lane, surface, stripes_count, s0, side)
 
-        # pygame.draw.line(surface, surface.YELLOW,
-                         # (surface.vec2pix(lane.position(0, -2))),
-                         # (surface.vec2pix(lane.position(0, 2))),
-                         # max(surface.pix(cls.STRIPE_WIDTH), 1))
+        pygame.draw.line(surface, surface.YELLOW,
+                         (surface.vec2pix(lane.position(0, -2))),
+                         (surface.vec2pix(lane.position(0, 2))),
+                         max(surface.pix(cls.STRIPE_WIDTH), 1))
 
 
     @classmethod
@@ -231,25 +227,12 @@ class LaneGraphics(object):
         pygame.draw.polygon(draw_surface, color, dots, 0)
 
 
-class ModelLaneGraphics(LaneGraphics):
-    """A visualization of a lane for the model vehicles."""
-
-    STRIPE_SPACING: float = 0.15
-    """ Offset between stripes [m]"""
-
-    STRIPE_LENGTH: float = 0.25
-    """ Length of a stripe [m]"""
-
-    STRIPE_WIDTH: float = 0.03
-    """ Width of a stripe [m]"""
-
-
 class RoadGraphics(object):
 
     """A visualization of a road lanes and vehicles."""
 
     @staticmethod
-    def display(road: Road, surface: WorldSurface, graphic_type = LaneGraphics) -> None:
+    def display(road: Road, surface: WorldSurface) -> None:
         """
         Display the road lanes on a surface.
 
@@ -260,7 +243,7 @@ class RoadGraphics(object):
         for _from in road.network.graph.keys():
             for _to in road.network.graph[_from].keys():
                 for l in road.network.graph[_from][_to]:
-                    graphic_type.display(l, surface)
+                    LaneGraphics.display(l, surface)
 
     @staticmethod
     def display_traffic(road: Road, surface: WorldSurface, simulation_frequency: int = 15, offscreen: bool = False) \

@@ -21,7 +21,6 @@ class SACD(RLAlgorithmBase):
         alpha_lr=3e-4,
         action_dim=None,
     ):
-
         self.automatic_entropy_tuning = automatic_entropy_tuning
         if self.automatic_entropy_tuning:
             assert target_entropy is not None
@@ -187,6 +186,7 @@ class SACD(RLAlgorithmBase):
         if not markov_critic:
             policy_loss = policy_loss[:-1]  # (T,B,1) remove the last obs
 
+        # Different to my current implemenation: I ouse log_probs directly without multiplication to new_probs
         # -> negative entropy (T+1, B, 1)
         log_probs = (new_probs * log_probs).sum(axis=-1, keepdims=True)
 

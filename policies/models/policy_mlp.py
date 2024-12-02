@@ -33,7 +33,7 @@ class ModelFreeOffPolicy_MLP(nn.Module):
         lr=3e-4,
         gamma=0.99,
         tau=5e-3,
-        **kwargs
+        **kwargs,
     ):
         super().__init__()
 
@@ -95,6 +95,7 @@ class ModelFreeOffPolicy_MLP(nn.Module):
             next_observs=next_observs,
         )
 
+        # Different to my current implemenation. I only use one optimizer for the q value
         qf1_loss = F.mse_loss(q1_pred, q_target)  # TD error
         qf2_loss = F.mse_loss(q2_pred, q_target)  # TD error
 
