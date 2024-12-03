@@ -21,7 +21,11 @@ env:
 train:
   num_iters: 500 # number meta-training iterates
   num_init_rollouts_pool: 5 # episodes before training
-  num_rollouts_per_iter: 1
+
+  # Either set steps or episodes
+  #num_rollouts_per_iter: 1
+  num_steps_per_iter: 8
+
   buffer_size: 500000
   batch_size: 256
   num_updates_per_iter: 16
@@ -33,7 +37,7 @@ train:
 
 eval:
   eval_stochastic: false # also eval stochastic policy
-  log_interval: 1 # num of iters
+  log_interval: 10 # num of iters
   save_interval: -1
   log_tensorboard: true
 
