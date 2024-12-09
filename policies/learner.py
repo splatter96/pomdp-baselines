@@ -7,6 +7,8 @@ import numpy as np
 import torch
 from torch.nn import functional as F
 
+from tqdm import tqdm
+
 # import gym
 import gymnasium as gym
 
@@ -488,22 +490,20 @@ class Learner:
         return rl_losses_agg
 
     @torch.no_grad()
-    def evaluate(self, tasks, deterministic=True):
+    def evaluate(self, tasks, deterministic=True, render=False, log=False):
         num_episodes = self.max_rollouts_per_task  # k
         # max_trajectory_len = k*H
         returns_per_episode = np.zeros((len(tasks), num_episodes))
         success_rate = np.zeros(len(tasks))
         total_steps = np.zeros(len(tasks))
+        crashes = 0
+        merges = 0
 
-        if self.env_type == "meta":
-            num_steps_per_episode = self.eval_env.unwrapped._max_episode_steps  # H
-            obs_size = self.eval_env.unwrapped.observation_space.shape[
-                0
-            ]  # original size
-            observations = np.zeros((len(tasks), self.max_trajectory_len + 1, obs_size))
-        else:  # pomdp, rmdp, generalize
-            num_steps_per_episode = self.eval_env._max_episode_steps
-            observations = None
+        num_steps_per_episode = self.eval_env._max_episode_steps
+        observations = None
+
+        if log:
+            tasks = tqdm(tasks)
 
         for task_idx, task in enumerate(tasks):
             step = 0
@@ -534,7 +534,7 @@ class Learner:
 
                     # observe reward and next obs
                     next_obs, reward, done, info = utl.env_step(
-                        self.eval_env, action.squeeze(dim=0)
+                        self.eval_env, action.squeeze(dim=0), render
                     )
 
                     # add raw reward
@@ -546,33 +546,24 @@ class Learner:
                     step += 1
                     done_rollout = False if ptu.get_numpy(done[0][0]) == 0.0 else True
 
-                    if self.env_type == "meta":
-                        observations[task_idx, step, :] = ptu.get_numpy(
-                            next_obs[0, :obs_size]
-                        )
-
                     # set: obs <- next_obs
                     obs = next_obs.clone()
 
-                    if (
-                        self.env_type == "meta"
-                        and "is_goal_state" in dir(self.eval_env.unwrapped)
-                        and self.eval_env.unwrapped.is_goal_state()
-                    ):
-                        success_rate[task_idx] = 1.0  # ever once reach
-                    elif (
-                        self.env_type == "generalize"
-                        and self.eval_env.unwrapped.is_success()
-                    ):
-                        success_rate[task_idx] = 1.0  # ever once reach
-                    elif "success" in info and info["success"] == True:  # keytodoor
-                        success_rate[task_idx] = 1.0
+                    if "crashed" in info and info["crashed"] == True:
+                        crashes += 1
+                    elif "merged" in info and info["merged"] == True and done_rollout:
+                        merges += 1
 
                     if done_rollout:
                         # for all env types, same
-                        break
-                    if self.env_type == "meta" and info["done_mdp"] == True:
-                        # for early stopping meta episode like Ant-Dir
+                        # if log:
+                        #     print(
+                        #         f"Mergerate: {merges/(task_idx+1)} Crashrate: {crashes/(task_idx+1)}"
+                        #     )
+                        if log:
+                            tasks.set_description(
+                                f"Crashrate {crashes/(task_idx+1)} Mergerate {merges/(task_idx+1)}"
+                            )
                         break
 
                 returns_per_episode[task_idx, episode_idx] = running_reward
@@ -658,3 +649,8 @@ class Learner:
     def load_model(self, ckpt_path):
         self.agent.load_state_dict(torch.load(ckpt_path, map_location=ptu.device))
         print("load successfully from", ckpt_path)
+
+    def enjoy(self, chkpt_path, render, num_runs):
+        self.load_model(chkpt_path)
+
+        self.evaluate(num_runs * [None], deterministic=True, render=render, log=True)

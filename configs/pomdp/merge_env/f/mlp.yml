@@ -48,7 +48,7 @@ policy:
   tau: 0.005
 
   sacd:
-    entropy_alpha: null
+    entropy_alpha:
     automatic_entropy_tuning: true
 
     #TODO set right target_entropy

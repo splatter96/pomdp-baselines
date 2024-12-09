@@ -9,7 +9,12 @@ import numpy as np
 from queue import PriorityQueue
 
 from highway_env import utils
-from highway_env.envs.common.action import action_factory, Action, DiscreteMetaAction, ActionType
+from highway_env.envs.common.action import (
+    action_factory,
+    Action,
+    DiscreteMetaAction,
+    ActionType,
+)
 from highway_env.envs.common.observation import observation_factory, ObservationType
 from highway_env.envs.common.finite_mdp import finite_mdp
 from highway_env.envs.common.graphics import EnvViewer
@@ -32,11 +37,12 @@ class AbstractEnv(gym.Env):
     speed. The action space is fixed, but the observation space and reward function must be defined in the
     environment implementations.
     """
+
     observation_type: ObservationType
     action_type: ActionType
     automatic_rendering_callback: Optional[Callable]
-    metadata = {'render.modes': ['human', 'rgb_array']}
-    render_mode = 'human'
+    metadata = {"render.modes": ["human", "rgb_array"]}
+    render_mode = "human"
 
     PERCEPTION_DISTANCE = 6.0 * MDPVehicle.SPEED_MAX
     """The maximum distance of any vehicle present in the observation [m]"""
@@ -73,16 +79,18 @@ class AbstractEnv(gym.Env):
         self.viewer = None
         self.automatic_rendering_callback = None
         self.should_update_rendering = True
-        self.rendering_mode = 'human'
+        self.rendering_mode = "human"
         self.enable_auto_render = False
 
         self.ends = [220, 100, 100, 100]  # Before, converging, merge, after
         self.action_is_safe = True
-        self.ACTIONS_ALL = {'LANE_LEFT': 0,
-                            'IDLE': 1,
-                            'LANE_RIGHT': 2,
-                            'FASTER': 3,
-                            'SLOWER': 4}
+        self.ACTIONS_ALL = {
+            "LANE_LEFT": 0,
+            "IDLE": 1,
+            "LANE_RIGHT": 2,
+            "FASTER": 3,
+            "SLOWER": 4,
+        }
 
         self.reset()
 
@@ -113,14 +121,12 @@ class AbstractEnv(gym.Env):
                 # "type": "Kinematics"
                 "type": "LidarObservation"
             },
-            "action": {
-                "type": "DiscreteMetaAction"
-            },
+            "action": {"type": "DiscreteMetaAction"},
             "simulation_frequency": 15,  # [Hz]
             "policy_frequency": 1,  # [Hz]
             "other_vehicles_type": "highway_env.vehicle.behavior.IDMVehicle",
-            "screen_width": 600,  # [px]
-            "screen_height": 150,  # [px]
+            "screen_width": 1200,  # [px]
+            "screen_height": 500,  # [px]
             "centering_position": [0.6, 0.5],
             "scaling": 5.5,
             "show_trajectories": False,
@@ -130,7 +136,7 @@ class AbstractEnv(gym.Env):
             "manual_control": False,
             "real_time_rendering": False,
             "n_step": 5,  # do n step prediction
-            "action_masking": True
+            "action_masking": True,
         }
 
     def configure(self, config: dict) -> None:
@@ -173,7 +179,9 @@ class AbstractEnv(gym.Env):
         """
         raise NotImplementedError
 
-    def reset(self, seed=None, is_training=True, testing_seeds=0, num_CAV=0) -> Observation:
+    def reset(
+        self, seed=None, is_training=True, testing_seeds=0, num_CAV=0
+    ) -> Observation:
         """
         Reset the environment to it's initial configuration
 
@@ -196,7 +204,9 @@ class AbstractEnv(gym.Env):
         if self.config["action_masking"]:
             available_actions = [[0] * self.n_a] * len(self.controlled_vehicles)
             for i in range(len(self.controlled_vehicles)):
-                available_action = self._get_available_actions(self.controlled_vehicles[i], self)
+                available_action = self._get_available_actions(
+                    self.controlled_vehicles[i], self
+                )
                 for a in available_action:
                     available_actions[i][a] = 1
         else:
@@ -205,7 +215,7 @@ class AbstractEnv(gym.Env):
         self.road.initial_vehicles = deepcopy(self.road.vehicles)
 
         # return np.asarray(obs).reshape((len(obs), -1)), np.array(available_actions)
-        #return np.asarray(obs).reshape((len(obs), -1)), {}
+        # return np.asarray(obs).reshape((len(obs), -1)), {}
         return obs, {}
 
     def _reset(self, num_CAV=1) -> None:
@@ -225,21 +235,25 @@ class AbstractEnv(gym.Env):
         """
         # if not isinstance(self.action_type, DiscreteMetaAction):
         #     raise ValueError("Only discrete meta-actions can be unavailable.")
-        actions = [env_copy.ACTIONS_ALL['IDLE']]
+        actions = [env_copy.ACTIONS_ALL["IDLE"]]
         for l_index in env_copy.road.network.side_lanes(vehicle.lane_index):
-            if l_index[2] < vehicle.lane_index[2] \
-                    and env_copy.road.network.get_lane(l_index).is_reachable_from(vehicle.position):
-                actions.append(env_copy.ACTIONS_ALL['LANE_LEFT'])
-            if l_index[2] > vehicle.lane_index[2] \
-                    and env_copy.road.network.get_lane(l_index).is_reachable_from(vehicle.position):
-                actions.append(env_copy.ACTIONS_ALL['LANE_RIGHT'])
+            if l_index[2] < vehicle.lane_index[2] and env_copy.road.network.get_lane(
+                l_index
+            ).is_reachable_from(vehicle.position):
+                actions.append(env_copy.ACTIONS_ALL["LANE_LEFT"])
+            if l_index[2] > vehicle.lane_index[2] and env_copy.road.network.get_lane(
+                l_index
+            ).is_reachable_from(vehicle.position):
+                actions.append(env_copy.ACTIONS_ALL["LANE_RIGHT"])
         if vehicle.speed_index < vehicle.SPEED_COUNT - 1:
-            actions.append(env_copy.ACTIONS_ALL['FASTER'])
+            actions.append(env_copy.ACTIONS_ALL["FASTER"])
         if vehicle.speed_index > 0:
-            actions.append(env_copy.ACTIONS_ALL['SLOWER'])
+            actions.append(env_copy.ACTIONS_ALL["SLOWER"])
         return actions
 
-    def check_safety_room(self, vehicle, action, surrounding_vehicles, env_copy, time_steps):
+    def check_safety_room(
+        self, vehicle, action, surrounding_vehicles, env_copy, time_steps
+    ):
         """
         para: vehicle: the ego vehicle
               surrounding_vehicles: [v_fl, v_rl, v_fr, v_rr]
@@ -258,37 +272,66 @@ class AbstractEnv(gym.Env):
             # if action is change lane, then find the minimum distance
             if action == 0 or action == 2:
                 for vj in surrounding_vehicles:
-                    if vj and abs(vj.trajectories[t][0][0] - vehicle.trajectories[t][0][0]) <= safety_room:
-                        safety_room = abs(vj.trajectories[t][0][0] - vehicle.trajectories[t][0][0])
+                    if (
+                        vj
+                        and abs(
+                            vj.trajectories[t][0][0] - vehicle.trajectories[t][0][0]
+                        )
+                        <= safety_room
+                    ):
+                        safety_room = abs(
+                            vj.trajectories[t][0][0] - vehicle.trajectories[t][0][0]
+                        )
             else:
                 # compute the headway distance
                 # if vehicle is on the main road
-                if vehicle.lane_index == ("a", "b", 0) or vehicle.lane_index == (
-                        "b", "c", 0) or vehicle.lane_index == ("c", "d", 0):
-                    if surrounding_vehicles[0] and (
-                            surrounding_vehicles[0].trajectories[t][0][0] - vehicle.trajectories[t][0][
-                        0]) <= safety_room:
-                        safety_room = surrounding_vehicles[0].trajectories[t][0][0] - vehicle.trajectories[t][0][0]
+                if (
+                    vehicle.lane_index == ("a", "b", 0)
+                    or vehicle.lane_index == ("b", "c", 0)
+                    or vehicle.lane_index == ("c", "d", 0)
+                ):
+                    if (
+                        surrounding_vehicles[0]
+                        and (
+                            surrounding_vehicles[0].trajectories[t][0][0]
+                            - vehicle.trajectories[t][0][0]
+                        )
+                        <= safety_room
+                    ):
+                        safety_room = (
+                            surrounding_vehicles[0].trajectories[t][0][0]
+                            - vehicle.trajectories[t][0][0]
+                        )
                 # vehicle is on the ramp
                 else:
-                    if surrounding_vehicles[2] and (
-                            surrounding_vehicles[2].trajectories[t][0][0] - vehicle.trajectories[t][0][
-                        0]) <= safety_room:
-                        safety_room = surrounding_vehicles[2].trajectories[t][0][0] - vehicle.trajectories[t][0][0]
+                    if (
+                        surrounding_vehicles[2]
+                        and (
+                            surrounding_vehicles[2].trajectories[t][0][0]
+                            - vehicle.trajectories[t][0][0]
+                        )
+                        <= safety_room
+                    ):
+                        safety_room = (
+                            surrounding_vehicles[2].trajectories[t][0][0]
+                            - vehicle.trajectories[t][0][0]
+                        )
 
             min_time_safety_rooms.append(safety_room)
         return min(min_time_safety_rooms)
 
     def safety_supervisor(self, action):
-        """"
+        """ "
         implementation of safety supervisor
         """
         # make a deep copy of the environment
         actions = []
         actions.append(action)
         env_copy = copy.deepcopy(self)
-        n_points = int(self.config["simulation_frequency"] // self.config["policy_frequency"]) * self.config[
-            "n_step"]
+        n_points = (
+            int(self.config["simulation_frequency"] // self.config["policy_frequency"])
+            * self.config["n_step"]
+        )
         """compute the priority of controlled vehicles"""
         # q = PriorityQueue()
         # vehicles_and_actions = []  # original vehicle and action
@@ -349,31 +392,45 @@ class AbstractEnv(gym.Env):
 
         available_actions = self._get_available_actions(vehicle, env_copy)
         # vehicle is on the main lane
-        if vehicle.lane_index == ("a", "b", 0) or vehicle.lane_index == ("b", "c", 0) or vehicle.lane_index == (
-                "c", "d", 0) or vehicle.lane_index == ("a", "b", 1) or vehicle.lane_index == (
-                "b", "c", 1) or vehicle.lane_index == ("c", "d", 1):
-            if  vehicle.lane_index == ("c", "d", 1):
+        if (
+            vehicle.lane_index == ("a", "b", 0)
+            or vehicle.lane_index == ("b", "c", 0)
+            or vehicle.lane_index == ("c", "d", 0)
+            or vehicle.lane_index == ("a", "b", 1)
+            or vehicle.lane_index == ("b", "c", 1)
+            or vehicle.lane_index == ("c", "d", 1)
+        ):
+            if vehicle.lane_index == ("c", "d", 1):
                 v_fr, v_rr = env_copy.road.surrounding_vehicles(vehicle)
                 if len(env_copy.road.network.side_lanes(vehicle.lane_index)) != 0:
-                    v_fl, v_rl = env_copy.road.surrounding_vehicles(vehicle,
-                                                                        env_copy.road.network.side_lanes(
-                                                                            vehicle.lane_index)[0])
+                    v_fl, v_rl = env_copy.road.surrounding_vehicles(
+                        vehicle, env_copy.road.network.side_lanes(vehicle.lane_index)[0]
+                    )
                 else:
                     v_fl, v_rl = None, None
             else:
                 v_fl, v_rl = env_copy.road.surrounding_vehicles(vehicle)
                 if len(env_copy.road.network.side_lanes(vehicle.lane_index)) != 0:
-                    if len(env_copy.road.network.side_lanes(vehicle.lane_index)) == 2:# (b,c,1)
-                        v_fr, v_rr = env_copy.road.surrounding_vehicles(vehicle,
-                                                                        env_copy.road.network.side_lanes(
-                                                                            vehicle.lane_index)[1])
+                    if (
+                        len(env_copy.road.network.side_lanes(vehicle.lane_index)) == 2
+                    ):  # (b,c,1)
+                        v_fr, v_rr = env_copy.road.surrounding_vehicles(
+                            vehicle,
+                            env_copy.road.network.side_lanes(vehicle.lane_index)[1],
+                        )
                     # assume we can observe vehicles on the ramp from this road
-                    elif vehicle.lane_index == ("a", "b", 1) and vehicle.position[0] > self.ends[0]:
-                        v_fr, v_rr = env_copy.road.surrounding_vehicles(vehicle, ("k", "b", 0))
-                    else:# (a,b,0)/(b,c,0)/(c,d,0)
-                        v_fr, v_rr = env_copy.road.surrounding_vehicles(vehicle,
-                                                                        env_copy.road.network.side_lanes(
-                                                                            vehicle.lane_index)[0])
+                    elif (
+                        vehicle.lane_index == ("a", "b", 1)
+                        and vehicle.position[0] > self.ends[0]
+                    ):
+                        v_fr, v_rr = env_copy.road.surrounding_vehicles(
+                            vehicle, ("k", "b", 0)
+                        )
+                    else:  # (a,b,0)/(b,c,0)/(c,d,0)
+                        v_fr, v_rr = env_copy.road.surrounding_vehicles(
+                            vehicle,
+                            env_copy.road.network.side_lanes(vehicle.lane_index)[0],
+                        )
                 else:
                     v_fr, v_rr = None, None
 
@@ -381,9 +438,9 @@ class AbstractEnv(gym.Env):
         else:
             v_fr, v_rr = env_copy.road.surrounding_vehicles(vehicle)
             if len(env_copy.road.network.side_lanes(vehicle.lane_index)) != 0:
-                v_fl, v_rl = env_copy.road.surrounding_vehicles(vehicle,
-                                                                env_copy.road.network.side_lanes(
-                                                                    vehicle.lane_index)[0])
+                v_fl, v_rl = env_copy.road.surrounding_vehicles(
+                    vehicle, env_copy.road.network.side_lanes(vehicle.lane_index)[0]
+                )
             # assume we can observe the straight road on the ramp
             elif vehicle.lane_index == ("k", "b", 0):
                 v_fl, v_rl = env_copy.road.surrounding_vehicles(vehicle, ("a", "b", 1))
@@ -428,7 +485,9 @@ class AbstractEnv(gym.Env):
                     self.check_collision(vehicle, other, other.trajectories[t])
 
             for other in env_copy.road.objects:
-                self.check_collision(vehicle, other, [other.position, other.heading, other.speed])
+                self.check_collision(
+                    vehicle, other, [other.position, other.heading, other.speed]
+                )
 
             if vehicle.crashed:
                 # TODO: check multiple collisions during n_points
@@ -441,19 +500,24 @@ class AbstractEnv(gym.Env):
                         pass
                     else:
                         vehicle_copy = copy.deepcopy(self.controlled_vehicles[index])
-                        safety_room = self.check_safety_room(vehicle_copy, a, [v_fl, v_rl, v_fr, v_rr],
-                                                             env_copy, t)
+                        safety_room = self.check_safety_room(
+                            vehicle_copy, a, [v_fl, v_rl, v_fr, v_rr], env_copy, t
+                        )
                         updated_vehicles.append(vehicle_copy)
                         candidate_actions.append(a)
                         safety_rooms.append(safety_room)
 
                 # reset the vehicle trajectory associated with the new action
-                env_copy.controlled_vehicles[index] = updated_vehicles[safety_rooms.index(max(safety_rooms))]
+                env_copy.controlled_vehicles[index] = updated_vehicles[
+                    safety_rooms.index(max(safety_rooms))
+                ]
                 vehicle = env_copy.controlled_vehicles[index]
                 env_copy.road.vehicles[index] = vehicle
                 if first_change:
                     first_change = False
-                    actions[index] = candidate_actions[safety_rooms.index(max(safety_rooms))]
+                    actions[index] = candidate_actions[
+                        safety_rooms.index(max(safety_rooms))
+                    ]
                 # TODO: check the collision after replacing the action
                 # reset its neighbor's crashed as False if True
                 for other in [v_fl, v_rl, v_fr, v_rr]:
@@ -463,7 +527,7 @@ class AbstractEnv(gym.Env):
         return actions
 
     def safety_supervisor_old(self, actions):
-        """"
+        """ "
         implementation of safety supervisor
         """
         # make a deep copy of the environment
@@ -471,8 +535,10 @@ class AbstractEnv(gym.Env):
         actions = [actions]
         # actions = list(actions)
         env_copy = copy.deepcopy(self)
-        n_points = int(self.config["simulation_frequency"] // self.config["policy_frequency"]) * self.config[
-            "n_step"]
+        n_points = (
+            int(self.config["simulation_frequency"] // self.config["policy_frequency"])
+            * self.config["n_step"]
+        )
         """compute the priority of controlled vehicles"""
         q = PriorityQueue()
         vehicles_and_actions = []  # original vehicle and action
@@ -496,16 +562,32 @@ class AbstractEnv(gym.Env):
             if vehicle.lane_index == ("b", "c", 1):
                 priority_number = -0.5
                 distance_to_merging_end = self.distance_to_merging_end(vehicle)
-                priority_number -= (self.ends[2] - distance_to_merging_end) / self.ends[2]
+                priority_number -= (self.ends[2] - distance_to_merging_end) / self.ends[
+                    2
+                ]
                 headway_distance = self._compute_headway_distance(vehicle)
-                priority_number += 0.5 * np.log(headway_distance
-                                          / (self.config["HEADWAY_TIME"] * vehicle.speed)) if vehicle.speed > 0 else 0
+                priority_number += (
+                    0.5
+                    * np.log(
+                        headway_distance / (self.config["HEADWAY_TIME"] * vehicle.speed)
+                    )
+                    if vehicle.speed > 0
+                    else 0
+                )
             else:
                 headway_distance = self._compute_headway_distance(vehicle)
-                priority_number += 0.5 * np.log(headway_distance
-                                          / (self.config["HEADWAY_TIME"] * vehicle.speed)) if vehicle.speed > 0 else 0
+                priority_number += (
+                    0.5
+                    * np.log(
+                        headway_distance / (self.config["HEADWAY_TIME"] * vehicle.speed)
+                    )
+                    if vehicle.speed > 0
+                    else 0
+                )
 
-            priority_number += np.random.rand() * 0.001  # to avoid the same priority number for two vehicles
+            priority_number += (
+                np.random.rand() * 0.001
+            )  # to avoid the same priority number for two vehicles
             q.put((priority_number, [vehicle, action, index]))
             index += 1
 
@@ -521,7 +603,9 @@ class AbstractEnv(gym.Env):
             if len(vehicle_and_action[0].trajectories) == n_points:
                 action = vehicle_and_action[1]
                 index = vehicle_and_action[2]
-                env_copy.controlled_vehicles[index] = copy.deepcopy(self.controlled_vehicles[index])
+                env_copy.controlled_vehicles[index] = copy.deepcopy(
+                    self.controlled_vehicles[index]
+                )
                 vehicle = env_copy.controlled_vehicles[index]
                 env_copy.road.vehicles[index] = vehicle
             else:
@@ -531,16 +615,24 @@ class AbstractEnv(gym.Env):
 
             available_actions = self._get_available_actions(vehicle, env_copy)
             # vehicle is on the main lane
-            if vehicle.lane_index == ("a", "b", 0) or vehicle.lane_index == ("b", "c", 0) or vehicle.lane_index == (
-                    "c", "d", 0):
+            if (
+                vehicle.lane_index == ("a", "b", 0)
+                or vehicle.lane_index == ("b", "c", 0)
+                or vehicle.lane_index == ("c", "d", 0)
+            ):
                 v_fl, v_rl = env_copy.road.surrounding_vehicles(vehicle)
                 if len(env_copy.road.network.side_lanes(vehicle.lane_index)) != 0:
-                    v_fr, v_rr = env_copy.road.surrounding_vehicles(vehicle,
-                                                                    env_copy.road.network.side_lanes(
-                                                                        vehicle.lane_index)[0])
+                    v_fr, v_rr = env_copy.road.surrounding_vehicles(
+                        vehicle, env_copy.road.network.side_lanes(vehicle.lane_index)[0]
+                    )
                 # assume we can observe the ramp on this road
-                elif vehicle.lane_index == ("a", "b", 0) and vehicle.position[0] > self.ends[0]:
-                    v_fr, v_rr = env_copy.road.surrounding_vehicles(vehicle, ("k", "b", 0))
+                elif (
+                    vehicle.lane_index == ("a", "b", 0)
+                    and vehicle.position[0] > self.ends[0]
+                ):
+                    v_fr, v_rr = env_copy.road.surrounding_vehicles(
+                        vehicle, ("k", "b", 0)
+                    )
                 else:
                     v_fr, v_rr = None, None
 
@@ -548,12 +640,14 @@ class AbstractEnv(gym.Env):
             else:
                 v_fr, v_rr = env_copy.road.surrounding_vehicles(vehicle)
                 if len(env_copy.road.network.side_lanes(vehicle.lane_index)) != 0:
-                    v_fl, v_rl = env_copy.road.surrounding_vehicles(vehicle,
-                                                                    env_copy.road.network.side_lanes(
-                                                                        vehicle.lane_index)[0])
+                    v_fl, v_rl = env_copy.road.surrounding_vehicles(
+                        vehicle, env_copy.road.network.side_lanes(vehicle.lane_index)[0]
+                    )
                 # assume we can observe the straight road on the ramp
                 elif vehicle.lane_index == ("k", "b", 0):
-                    v_fl, v_rl = env_copy.road.surrounding_vehicles(vehicle, ("a", "b", 0))
+                    v_fl, v_rl = env_copy.road.surrounding_vehicles(
+                        vehicle, ("a", "b", 0)
+                    )
                 else:
                     v_fl, v_rl = None, None
 
@@ -580,7 +674,7 @@ class AbstractEnv(gym.Env):
 
                         elif type(v) is MDPVehicle and v is not vehicle:
                             # use the previous action: idle
-                            mdp_controller(v, env_copy,  actions[v.id])
+                            mdp_controller(v, env_copy, actions[v.id])
                         elif type(v) is MDPVehicle and v is vehicle:
                             if actions[index] == action:
                                 mdp_controller(v, env_copy, action)
@@ -594,7 +688,9 @@ class AbstractEnv(gym.Env):
                         self.check_collision(vehicle, other, other.trajectories[t])
 
                 for other in env_copy.road.objects:
-                    self.check_collision(vehicle, other, [other.position, other.heading, other.speed])
+                    self.check_collision(
+                        vehicle, other, [other.position, other.heading, other.speed]
+                    )
 
                 if vehicle.crashed:
                     # TODO: check multiple collisions during n_points
@@ -604,19 +700,24 @@ class AbstractEnv(gym.Env):
                     candidate_actions = []
                     for a in available_actions:
                         vehicle_copy = copy.deepcopy(self.controlled_vehicles[index])
-                        safety_room = self.check_safety_room(vehicle_copy, a, [v_fl, v_rl, v_fr, v_rr],
-                                                             env_copy, t)
+                        safety_room = self.check_safety_room(
+                            vehicle_copy, a, [v_fl, v_rl, v_fr, v_rr], env_copy, t
+                        )
                         updated_vehicles.append(vehicle_copy)
                         candidate_actions.append(a)
                         safety_rooms.append(safety_room)
 
                     # reset the vehicle trajectory associated with the new action
-                    env_copy.controlled_vehicles[index] = updated_vehicles[safety_rooms.index(max(safety_rooms))]
+                    env_copy.controlled_vehicles[index] = updated_vehicles[
+                        safety_rooms.index(max(safety_rooms))
+                    ]
                     vehicle = env_copy.controlled_vehicles[index]
                     env_copy.road.vehicles[index] = vehicle
                     if first_change:
                         first_change = False
-                        actions[index] = candidate_actions[safety_rooms.index(max(safety_rooms))]
+                        actions[index] = candidate_actions[
+                            safety_rooms.index(max(safety_rooms))
+                        ]
                     # TODO: check the collision after replacing the action
                     # reset its neighbor's crashed as False if True
                     for other in [v_fl, v_rl, v_fr, v_rr]:
@@ -635,10 +736,12 @@ class AbstractEnv(gym.Env):
         :param action: the action performed by the ego-vehicle
         :return: a tuple (observation, reward, terminal, info)
         """
-    #    print(f"Stepping env with {self.config}")
+        #    print(f"Stepping env with {self.config}")
         average_speed = 0
         if self.road is None or self.vehicle is None:
-            raise NotImplementedError("The road and vehicle must be initialized in the environment implementation")
+            raise NotImplementedError(
+                "The road and vehicle must be initialized in the environment implementation"
+            )
 
         self.steps += 1
         if self.config["safety_guarantee"]:
@@ -657,7 +760,9 @@ class AbstractEnv(gym.Env):
         if self.config["action_masking"]:
             available_actions = [[0] * self.n_a] * len(self.controlled_vehicles)
             for i in range(len(self.controlled_vehicles)):
-                available_action = self._get_available_actions(self.controlled_vehicles[i], self)
+                available_action = self._get_available_actions(
+                    self.controlled_vehicles[i], self
+                )
                 for a in available_action:
                     available_actions[i][a] = 1
         else:
@@ -680,8 +785,10 @@ class AbstractEnv(gym.Env):
         crashes = [veh.crashed for veh in other_vehciles]
 
         # did the ego vehicle merge succesfully
-        ego_veh_lane = self.road.network.get_closest_lane_index(self.controlled_vehicles[0].position, 0.0)
-        merged = ego_veh_lane == ('c', 'd', 0) or ego_veh_lane == ('c', 'd', 1)
+        ego_veh_lane = self.road.network.get_closest_lane_index(
+            self.controlled_vehicles[0].position, 0.0
+        )
+        merged = ego_veh_lane == ("c", "d", 0) or ego_veh_lane == ("c", "d", 1)
 
         info = {
             "speed": self.vehicle.speed,
@@ -694,7 +801,7 @@ class AbstractEnv(gym.Env):
             "average_road_speed": average_road_speed,
             "vehicle_speed": self.vehicle_speed,
             "vehicle_position": self.vehicle_pos,
-            "merged": merged
+            "merged": merged,
         }
 
         # if terminal:
@@ -711,15 +818,26 @@ class AbstractEnv(gym.Env):
 
     def _simulate(self, action: Optional[Action] = None) -> None:
         """Perform several steps of simulation with constant action."""
-        for _ in range(int(self.config["simulation_frequency"] // self.config["policy_frequency"])):
+        for _ in range(
+            int(self.config["simulation_frequency"] // self.config["policy_frequency"])
+        ):
             # Forward action to the vehicle
-            if action is not None \
-                    and not self.config["manual_control"] \
-                    and self.time % int(self.config["simulation_frequency"] // self.config["policy_frequency"]) == 0:
+            if (
+                action is not None
+                and not self.config["manual_control"]
+                and self.time
+                % int(
+                    self.config["simulation_frequency"]
+                    // self.config["policy_frequency"]
+                )
+                == 0
+            ):
                 self.action_type.act(action)  # defined in action.py
 
             self.road.act()  # Execute an action
-            self.road.step(1 / self.config["simulation_frequency"])  # propagate the vehicle state given its actions.
+            self.road.step(
+                1 / self.config["simulation_frequency"]
+            )  # propagate the vehicle state given its actions.
             self.time += 1
 
             # Automatically render intermediate simulation steps if a viewer has been launched
@@ -731,7 +849,7 @@ class AbstractEnv(gym.Env):
                 break
         self.enable_auto_render = False
 
-    def render(self, mode: str = 'human') -> Optional[np.ndarray]:
+    def render(self, mode: str = "human") -> Optional[np.ndarray]:
         """
         Render the environment.
 
@@ -751,7 +869,7 @@ class AbstractEnv(gym.Env):
 
         if not self.viewer.offscreen:
             self.viewer.handle_events()
-        if mode == 'rgb_array':
+        if mode == "rgb_array":
             image = self.viewer.get_image()
             return image
         self.should_update_rendering = False
@@ -778,20 +896,31 @@ class AbstractEnv(gym.Env):
         """
         if not isinstance(self.action_type, DiscreteMetaAction):
             raise ValueError("Only discrete meta-actions can be unavailable.")
-        actions = [self.action_type.actions_indexes['IDLE']]
+        actions = [self.action_type.actions_indexes["IDLE"]]
         for l_index in self.road.network.side_lanes(self.vehicle.lane_index):
-            if l_index[2] < self.vehicle.lane_index[2] \
-                    and self.road.network.get_lane(l_index).is_reachable_from(self.vehicle.position) \
-                    and self.action_type.lateral:
-                actions.append(self.action_type.actions_indexes['LANE_LEFT'])
-            if l_index[2] > self.vehicle.lane_index[2] \
-                    and self.road.network.get_lane(l_index).is_reachable_from(self.vehicle.position) \
-                    and self.action_type.lateral:
-                actions.append(self.action_type.actions_indexes['LANE_RIGHT'])
-        if self.vehicle.speed_index < self.vehicle.SPEED_COUNT - 1 and self.action_type.longitudinal:
-            actions.append(self.action_type.actions_indexes['FASTER'])
+            if (
+                l_index[2] < self.vehicle.lane_index[2]
+                and self.road.network.get_lane(l_index).is_reachable_from(
+                    self.vehicle.position
+                )
+                and self.action_type.lateral
+            ):
+                actions.append(self.action_type.actions_indexes["LANE_LEFT"])
+            if (
+                l_index[2] > self.vehicle.lane_index[2]
+                and self.road.network.get_lane(l_index).is_reachable_from(
+                    self.vehicle.position
+                )
+                and self.action_type.lateral
+            ):
+                actions.append(self.action_type.actions_indexes["LANE_RIGHT"])
+        if (
+            self.vehicle.speed_index < self.vehicle.SPEED_COUNT - 1
+            and self.action_type.longitudinal
+        ):
+            actions.append(self.action_type.actions_indexes["FASTER"])
         if self.vehicle.speed_index > 0 and self.action_type.longitudinal:
-            actions.append(self.action_type.actions_indexes['SLOWER'])
+            actions.append(self.action_type.actions_indexes["SLOWER"])
         return actions
 
     def _automatic_rendering(self) -> None:
@@ -817,24 +946,36 @@ class AbstractEnv(gym.Env):
             distance_to_end = sum(self.ends[:3]) - vehicle.position[0]
         return distance_to_end
 
-    def _compute_headway_distance(self, vehicle, ):
+    def _compute_headway_distance(
+        self,
+        vehicle,
+    ):
         headway_distance = 60
         for v in self.road.vehicles:
-            if (v.lane_index == vehicle.lane_index) and (v.position[0] > vehicle.position[0]):
+            if (v.lane_index == vehicle.lane_index) and (
+                v.position[0] > vehicle.position[0]
+            ):
                 hd = v.position[0] - vehicle.position[0]
                 if hd < headway_distance:
                     headway_distance = hd
 
             # also consider the vehicles on the next road segmentation connected to the current lane
-            if (vehicle.lane_index != ("b", "c", 1)) and (
-                    v.lane_index == self.road.network.next_lane(vehicle.lane_index, position=vehicle.position)) and \
-                    (v.position[0] > vehicle.position[0]):
+            if (
+                (vehicle.lane_index != ("b", "c", 1))
+                and (
+                    v.lane_index
+                    == self.road.network.next_lane(
+                        vehicle.lane_index, position=vehicle.position
+                    )
+                )
+                and (v.position[0] > vehicle.position[0])
+            ):
                 hd = v.position[0] - vehicle.position[0]
                 if hd < headway_distance:
                     headway_distance = hd
         return headway_distance
 
-    def simplify(self) -> 'AbstractEnv':
+    def simplify(self) -> "AbstractEnv":
         """
         Return a simplified copy of the environment where distant vehicles have been removed from the road.
         This is meant to lower the policy computational load while preserving the optimal actions set.
@@ -842,11 +983,14 @@ class AbstractEnv(gym.Env):
         :return: a simplified environment state
         """
         state_copy = copy.deepcopy(self)
-        state_copy.road.vehicles = [state_copy.vehicle] + state_copy.road.close_vehicles_to(
-            state_copy.vehicle, self.PERCEPTION_DISTANCE)
+        state_copy.road.vehicles = [
+            state_copy.vehicle
+        ] + state_copy.road.close_vehicles_to(
+            state_copy.vehicle, self.PERCEPTION_DISTANCE
+        )
         return state_copy
 
-    def change_vehicles(self, vehicle_class_path: str) -> 'AbstractEnv':
+    def change_vehicles(self, vehicle_class_path: str) -> "AbstractEnv":
         """
         Change the type of all vehicles on the road
 
@@ -863,7 +1007,7 @@ class AbstractEnv(gym.Env):
                 vehicles[i] = vehicle_class.create_from(v)
         return env_copy
 
-    def set_preferred_lane(self, preferred_lane: int = None) -> 'AbstractEnv':
+    def set_preferred_lane(self, preferred_lane: int = None) -> "AbstractEnv":
         env_copy = copy.deepcopy(self)
         if preferred_lane:
             for v in env_copy.road.vehicles:
@@ -873,14 +1017,14 @@ class AbstractEnv(gym.Env):
                     v.LANE_CHANGE_MAX_BRAKING_IMPOSED = 1000
         return env_copy
 
-    def set_route_at_intersection(self, _to: str) -> 'AbstractEnv':
+    def set_route_at_intersection(self, _to: str) -> "AbstractEnv":
         env_copy = copy.deepcopy(self)
         for v in env_copy.road.vehicles:
             if isinstance(v, IDMVehicle):
                 v.set_route_at_intersection(_to)
         return env_copy
 
-    def set_vehicle_field(self, args: Tuple[str, object]) -> 'AbstractEnv':
+    def set_vehicle_field(self, args: Tuple[str, object]) -> "AbstractEnv":
         field, value = args
         env_copy = copy.deepcopy(self)
         for v in env_copy.road.vehicles:
@@ -888,7 +1032,7 @@ class AbstractEnv(gym.Env):
                 setattr(v, field, value)
         return env_copy
 
-    def call_vehicle_method(self, args: Tuple[str, Tuple[object]]) -> 'AbstractEnv':
+    def call_vehicle_method(self, args: Tuple[str, Tuple[object]]) -> "AbstractEnv":
         method, method_args = args
         env_copy = copy.deepcopy(self)
         for i, v in enumerate(env_copy.road.vehicles):
@@ -896,7 +1040,7 @@ class AbstractEnv(gym.Env):
                 env_copy.road.vehicles[i] = getattr(v, method)(*method_args)
         return env_copy
 
-    def randomize_behaviour(self) -> 'AbstractEnv':
+    def randomize_behaviour(self) -> "AbstractEnv":
         env_copy = copy.deepcopy(self)
         for v in env_copy.road.vehicles:
             if isinstance(v, IDMVehicle):
@@ -912,7 +1056,7 @@ class AbstractEnv(gym.Env):
         result = cls.__new__(cls)
         memo[id(self)] = result
         for k, v in self.__dict__.items():
-            if k not in ['viewer', 'automatic_rendering_callback']:
+            if k not in ["viewer", "automatic_rendering_callback"]:
                 setattr(result, k, copy.deepcopy(v, memo))
             else:
                 setattr(result, k, None)
@@ -930,7 +1074,9 @@ class AbstractEnv(gym.Env):
 
         if isinstance(other, Vehicle):
             if self._is_colliding(vehicle, other, other_trajectories):
-                vehicle.speed = other_trajectories[2] = min([vehicle.speed, other_trajectories[2]], key=abs)
+                vehicle.speed = other_trajectories[2] = min(
+                    [vehicle.speed, other_trajectories[2]], key=abs
+                )
                 vehicle.crashed = other.crashed = True
 
         elif isinstance(other, Obstacle):
@@ -952,8 +1098,19 @@ class AbstractEnv(gym.Env):
 
         # Accurate rectangular check
         return utils.rotated_rectangles_intersect(
-            (vehicle.position, 0.9 * vehicle.LENGTH, 0.9 * vehicle.WIDTH, vehicle.heading),
-            (other_trajectories[0], 0.9 * other.LENGTH, 0.9 * other.WIDTH, other_trajectories[1]))
+            (
+                vehicle.position,
+                0.9 * vehicle.LENGTH,
+                0.9 * vehicle.WIDTH,
+                vehicle.heading,
+            ),
+            (
+                other_trajectories[0],
+                0.9 * other.LENGTH,
+                0.9 * other.WIDTH,
+                other_trajectories[1],
+            ),
+        )
 
 
 class MultiAgentWrapper(Wrapper):

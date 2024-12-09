@@ -3,6 +3,7 @@ import warnings
 import numpy as np
 import pickle
 import os
+import time
 
 import torch
 import torch.nn as nn
@@ -41,13 +42,17 @@ def get_dim(space):
         raise NotImplementedError
 
 
-def env_step(env, action):
+def env_step(env, action, render=False):
     # action: (A)
     # return: all 2D tensor shape (B=1, dim)
     action = ptu.get_numpy(action)
     if env.action_space.__class__.__name__ == "Discrete":
         action = np.argmax(action)  # one-hot to int
     next_obs, reward, done, _, info = env.step(action)
+
+    if render:
+        env.render()
+        time.sleep(0.2)
 
     # TODO add more general observation preprocessor
     next_obs = next_obs.flatten()
