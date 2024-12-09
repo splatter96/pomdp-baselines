@@ -1,7 +1,6 @@
 from typing import List, Dict, TYPE_CHECKING, Optional, Union
 from gymnasium import spaces
 import gymnasium as gym
-
 gym.logger.set_level(40)
 import numpy as np
 import pandas as pd
@@ -16,7 +15,7 @@ if TYPE_CHECKING:
 
 
 class ObservationType(object):
-    def __init__(self, env: "AbstractEnv", **kwargs) -> None:
+    def __init__(self, env: 'AbstractEnv', **kwargs) -> None:
         self.env = env
         self.__observer_vehicle = None
 
@@ -43,6 +42,7 @@ class ObservationType(object):
 
 
 class GrayscaleObservation(ObservationType):
+
     """
     An observation class that collects directly what the simulator renders
 
@@ -61,16 +61,18 @@ class GrayscaleObservation(ObservationType):
     expected observation_shape.
     """
 
-    def __init__(self, env: "AbstractEnv", config: dict) -> None:
+    def __init__(self, env: 'AbstractEnv', config: dict) -> None:
         super().__init__(env)
         self.config = config
         self.observation_shape = config["observation_shape"]
-        self.shape = self.observation_shape + (config["stack_size"],)
+        self.shape = self.observation_shape + (config["stack_size"], )
         self.state = np.zeros(self.shape)
 
     def space(self) -> spaces.Space:
         try:
-            return spaces.Box(shape=self.shape, low=0, high=1, dtype=np.float32)
+            return spaces.Box(shape=self.shape,
+                              low=0, high=1,
+                              dtype=np.float32)
         except AttributeError:
             return spaces.Space()
 
@@ -82,70 +84,60 @@ class GrayscaleObservation(ObservationType):
         return self.state
 
     def _record_to_grayscale(self) -> np.ndarray:
-        # TODO: center rendering on the observer vehicle
-        raw_rgb = self.env.render("rgb_array")
-        return np.dot(raw_rgb[..., :3], self.config["weights"])
+        #TODO: center rendering on the observer vehicle
+        raw_rgb = self.env.render('rgb_array')
+        return np.dot(raw_rgb[..., :3], self.config['weights'])
 
 
 class TimeToCollisionObservation(ObservationType):
-    def __init__(self, env: "AbstractEnv", horizon: int = 10, **kwargs: dict) -> None:
+    def __init__(self, env: 'AbstractEnv', horizon: int = 10, **kwargs: dict) -> None:
         super().__init__(env)
         self.horizon = horizon
 
     def space(self) -> spaces.Space:
         try:
-            return spaces.Box(
-                shape=self.observe().shape, low=0, high=1, dtype=np.float32
-            )
+            return spaces.Box(shape=self.observe().shape, low=0, high=1, dtype=np.float32)
         except AttributeError:
             return spaces.Space()
 
     def observe(self) -> np.ndarray:
         if not self.env.road:
-            return np.zeros(
-                (3, 3, int(self.horizon * self.env.config["policy_frequency"]))
-            )
-        grid = compute_ttc_grid(
-            self.env,
-            vehicle=self.observer_vehicle,
-            time_quantization=1 / self.env.config["policy_frequency"],
-            horizon=self.horizon,
-        )
+            return np.zeros((3, 3, int(self.horizon * self.env.config["policy_frequency"])))
+        grid = compute_ttc_grid(self.env, vehicle=self.observer_vehicle,
+                                time_quantization=1/self.env.config["policy_frequency"], horizon=self.horizon)
         padding = np.ones(np.shape(grid))
         padded_grid = np.concatenate([padding, grid, padding], axis=1)
         obs_lanes = 3
         l0 = grid.shape[1] + self.observer_vehicle.lane_index[2] - obs_lanes // 2
         lf = grid.shape[1] + self.observer_vehicle.lane_index[2] + obs_lanes // 2
-        clamped_grid = padded_grid[:, l0 : lf + 1, :]
+        clamped_grid = padded_grid[:, l0:lf+1, :]
         repeats = np.ones(clamped_grid.shape[0])
         repeats[np.array([0, -1])] += clamped_grid.shape[0]
         padded_grid = np.repeat(clamped_grid, repeats.astype(int), axis=0)
         obs_speeds = 3
         v0 = grid.shape[0] + self.observer_vehicle.speed_index - obs_speeds // 2
         vf = grid.shape[0] + self.observer_vehicle.speed_index + obs_speeds // 2
-        clamped_grid = padded_grid[v0 : vf + 1, :, :]
+        clamped_grid = padded_grid[v0:vf + 1, :, :]
         return clamped_grid
 
 
 class KinematicObservation(ObservationType):
+
     """Observe the kinematics of nearby vehicles."""
 
-    FEATURES: List[str] = ["presence", "x", "y", "vx", "vy"]
+    FEATURES: List[str] = ['presence', 'x', 'y', 'vx', 'vy']
 
-    def __init__(
-        self,
-        env: "AbstractEnv",
-        features: List[str] = None,
-        vehicles_count: int = 5,
-        features_range: Dict[str, List[float]] = None,
-        absolute: bool = False,
-        order: str = "sorted",
-        normalize: bool = True,
-        clip: bool = False,
-        see_behind: bool = True,
-        observe_intentions: bool = False,
-        **kwargs: dict,
-    ) -> None:
+    def __init__(self, env: 'AbstractEnv',
+                 features: List[str] = None,
+                 vehicles_count: int = 5,
+                 features_range: Dict[str, List[float]] = None,
+                 absolute: bool = False,
+                 order: str = "sorted",
+                 normalize: bool = True,
+                 clip: bool = False,
+                 see_behind: bool = True,
+                 observe_intentions: bool = False,
+                 **kwargs: dict) -> None:
         """
         :param env: The environment to observe
         :param features: Names of features used in the observation
@@ -169,12 +161,7 @@ class KinematicObservation(ObservationType):
         self.observe_intentions = observe_intentions
 
     def space(self) -> spaces.Space:
-        return spaces.Box(
-            shape=(self.vehicles_count, len(self.features)),
-            low=-1,
-            high=1,
-            dtype=np.float32,
-        )
+        return spaces.Box(shape=(self.vehicles_count, len(self.features)), low=-1, high=1, dtype=np.float32)
 
     def normalize_obs2(self, data: List[dict]):
         if not self.features_range:
@@ -182,20 +169,13 @@ class KinematicObservation(ObservationType):
                 "x": [-5.0 * MDPVehicle.SPEED_MAX, 5.0 * MDPVehicle.SPEED_MAX],
                 "y": [-12, 12],
                 "vx": [-1.5 * MDPVehicle.SPEED_MAX, 1.5 * MDPVehicle.SPEED_MAX],
-                "vy": [-1.5 * MDPVehicle.SPEED_MAX, 1.5 * MDPVehicle.SPEED_MAX],
+                "vy": [-1.5 * MDPVehicle.SPEED_MAX, 1.5 * MDPVehicle.SPEED_MAX]
             }
 
         for veh in data:
             for feature, _ in veh.items():
                 if feature in self.features_range.keys():
-                    veh[feature] = utils.lmap(
-                        veh[feature],
-                        [
-                            self.features_range[feature][0],
-                            self.features_range[feature][1],
-                        ],
-                        [-1, 1],
-                    )
+                    veh[feature] = utils.lmap(veh[feature], [self.features_range[feature][0], self.features_range[feature][1]], [-1, 1])
                     # veh[feature] = np.interp(veh[feature], [self.features_range[feature][0], self.features_range[feature][1]], [-1, 1])
 
         return data
@@ -219,11 +199,11 @@ class KinematicObservation(ObservationType):
                 "x": [-5.0 * MDPVehicle.SPEED_MAX, 5.0 * MDPVehicle.SPEED_MAX],
                 "y": [-12, 12],
                 "vx": [-1.5 * MDPVehicle.SPEED_MAX, 1.5 * MDPVehicle.SPEED_MAX],
-                "vy": [-1.5 * MDPVehicle.SPEED_MAX, 1.5 * MDPVehicle.SPEED_MAX],
+                "vy": [-1.5 * MDPVehicle.SPEED_MAX, 1.5 * MDPVehicle.SPEED_MAX]
             }
         for feature, f_range in self.features_range.items():
             if feature in df:
-                # df[feature] = utils.lmap(df[feature], [f_range[0], f_range[1]], [-1, 1])
+                #df[feature] = utils.lmap(df[feature], [f_range[0], f_range[1]], [-1, 1])
                 df[feature] = np.interp(df[feature], [f_range[0], f_range[1]], [-1, 1])
                 if self.clip:
                     df[feature] = np.clip(df[feature], -1, 1)
@@ -237,32 +217,23 @@ class KinematicObservation(ObservationType):
         df = pd.DataFrame.from_records([self.observer_vehicle.to_dict()])[self.features]
         # Add nearby traffic
         # sort = self.order == "sorted"
-        close_vehicles = self.env.road.close_vehicles_to(
-            self.observer_vehicle,
-            self.env.PERCEPTION_DISTANCE,
-            count=self.vehicles_count - 1,
-            see_behind=self.see_behind,
-        )
+        close_vehicles = self.env.road.close_vehicles_to(self.observer_vehicle,
+                                                         self.env.PERCEPTION_DISTANCE,
+                                                         count=self.vehicles_count - 1,
+                                                         see_behind=self.see_behind)
         if close_vehicles:
             origin = self.observer_vehicle if not self.absolute else None
-            df = df.append(
-                pd.DataFrame.from_records(
-                    [
-                        v.to_dict(origin, observe_intentions=self.observe_intentions)
-                        for v in close_vehicles[-self.vehicles_count + 1 :]
-                    ]
-                )[self.features],
-                ignore_index=True,
-            )
+            df = df.append(pd.DataFrame.from_records(
+                [v.to_dict(origin, observe_intentions=self.observe_intentions)
+                 for v in close_vehicles[-self.vehicles_count + 1:]])[self.features],
+                           ignore_index=True)
         # Normalize and clip
         if self.normalize:
             df = self.normalize_obs(df)
         # Fill missing rows
         if df.shape[0] < self.vehicles_count:
             rows = np.zeros((self.vehicles_count - df.shape[0], len(self.features)))
-            df = df.append(
-                pd.DataFrame(data=rows, columns=self.features), ignore_index=True
-            )
+            df = df.append(pd.DataFrame(data=rows, columns=self.features), ignore_index=True)
         # Reorder
         df = df[self.features]
         obs = df.values.copy()
@@ -276,30 +247,25 @@ class KinematicObservation(ObservationType):
             return np.zeros(self.space().shape)
 
         # Collect nearby traffic
-        close_vehicles = self.env.road.close_vehicles_to(
-            self.observer_vehicle,
-            self.env.PERCEPTION_DISTANCE,
-            count=self.vehicles_count - 1,
-            see_behind=self.see_behind,
-        )
+        close_vehicles = self.env.road.close_vehicles_to(self.observer_vehicle,
+                                                         self.env.PERCEPTION_DISTANCE,
+                                                         count=self.vehicles_count - 1,
+                                                         see_behind=self.see_behind)
         obs_list = []
 
         # Add ego-vehicle
         obs = self.observer_vehicle.to_dict()
         # extract only the features we want
-        obs = {k: obs[k] for k in self.features if k in obs}
+        obs = {k:obs[k] for k in self.features if k in obs}
         obs_list.append(obs)
 
         if close_vehicles:
             origin = self.observer_vehicle if not self.absolute else None
 
-            close_veh = [
-                v.to_dict(origin, observe_intentions=self.observe_intentions)
-                for v in close_vehicles[-self.vehicles_count + 1 :]
-            ]
+            close_veh = [v.to_dict(origin, observe_intentions=self.observe_intentions) for v in close_vehicles[-self.vehicles_count + 1:]]
             # extract only the features we want
             for idx, veh in enumerate(close_veh):
-                close_veh[idx] = {k: veh[k] for k in self.features if k in veh}
+                close_veh[idx] = {k:veh[k] for k in self.features if k in veh}
                 obs_list.append(close_veh[idx])
 
         # Normalize and clip
@@ -308,33 +274,31 @@ class KinematicObservation(ObservationType):
 
         # Fill missing rows
         if len(obs_list) < self.vehicles_count:
-            empty_row = {k: 0 for k in self.features}
+            empty_row = {k:0 for k in self.features}
             for i in range(self.vehicles_count - len(obs_list)):
                 obs_list.append(empty_row)
 
         # Convert to 2D Array
-        res = [[item.get(key, "") for key in self.features] for item in obs_list]
+        res = [[item.get(key, '') for key in self.features] for item in obs_list]
 
-        return np.array(res)
-
+        return res
 
 class OccupancyGridObservation(ObservationType):
+
     """Observe an occupancy grid of nearby vehicles."""
 
-    FEATURES: List[str] = ["presence", "vx", "vy"]
-    GRID_SIZE: List[List[float]] = [[-5.5 * 5, 5.5 * 5], [-5.5 * 5, 5.5 * 5]]
+    FEATURES: List[str] = ['presence', 'vx', 'vy']
+    GRID_SIZE: List[List[float]] = [[-5.5*5, 5.5*5], [-5.5*5, 5.5*5]]
     GRID_STEP: List[int] = [5, 5]
 
-    def __init__(
-        self,
-        env: "AbstractEnv",
-        features: Optional[List[str]] = None,
-        grid_size: Optional[List[List[float]]] = None,
-        grid_step: Optional[List[int]] = None,
-        features_range: Dict[str, List[float]] = None,
-        absolute: bool = False,
-        **kwargs: dict,
-    ) -> None:
+    def __init__(self,
+                 env: 'AbstractEnv',
+                 features: Optional[List[str]] = None,
+                 grid_size: Optional[List[List[float]]] = None,
+                 grid_step: Optional[List[int]] = None,
+                 features_range: Dict[str, List[float]] = None,
+                 absolute: bool = False,
+                 **kwargs: dict) -> None:
         """
         :param env: The environment to observe
         :param features: Names of features used in the observation
@@ -342,16 +306,9 @@ class OccupancyGridObservation(ObservationType):
         """
         super().__init__(env)
         self.features = features if features is not None else self.FEATURES
-        self.grid_size = (
-            np.array(grid_size) if grid_size is not None else np.array(self.GRID_SIZE)
-        )
-        self.grid_step = (
-            np.array(grid_step) if grid_step is not None else np.array(self.GRID_STEP)
-        )
-        grid_shape = np.asarray(
-            np.floor((self.grid_size[:, 1] - self.grid_size[:, 0]) / grid_step),
-            dtype=np.int,
-        )
+        self.grid_size = np.array(grid_size) if grid_size is not None else np.array(self.GRID_SIZE)
+        self.grid_step = np.array(grid_step) if grid_step is not None else np.array(self.GRID_STEP)
+        grid_shape = np.asarray(np.floor((self.grid_size[:, 1] - self.grid_size[:, 0]) / grid_step), dtype=np.int)
         self.grid = np.zeros((len(self.features), *grid_shape))
         self.features_range = features_range
         self.absolute = absolute
@@ -368,8 +325,8 @@ class OccupancyGridObservation(ObservationType):
         """
         if not self.features_range:
             self.features_range = {
-                "vx": [-2 * MDPVehicle.SPEED_MAX, 2 * MDPVehicle.SPEED_MAX],
-                "vy": [-2 * MDPVehicle.SPEED_MAX, 2 * MDPVehicle.SPEED_MAX],
+                "vx": [-2*MDPVehicle.SPEED_MAX, 2*MDPVehicle.SPEED_MAX],
+                "vy": [-2*MDPVehicle.SPEED_MAX, 2*MDPVehicle.SPEED_MAX]
             }
         for feature, f_range in self.features_range.items():
             if feature in df:
@@ -386,8 +343,7 @@ class OccupancyGridObservation(ObservationType):
             # Add nearby traffic
             self.grid.fill(0)
             df = pd.DataFrame.from_records(
-                [v.to_dict(self.observer_vehicle) for v in self.env.road.vehicles]
-            )
+                [v.to_dict(self.observer_vehicle) for v in self.env.road.vehicles])
             # Normalize
             df = self.normalize(df)
             # Fill-in features
@@ -396,25 +352,12 @@ class OccupancyGridObservation(ObservationType):
                     x, y = vehicle["x"], vehicle["y"]
                     # Recover unnormalized coordinates for cell index
                     if "x" in self.features_range:
-                        x = utils.lmap(
-                            x,
-                            [-1, 1],
-                            [self.features_range["x"][0], self.features_range["x"][1]],
-                        )
+                        x = utils.lmap(x, [-1, 1], [self.features_range["x"][0], self.features_range["x"][1]])
                     if "y" in self.features_range:
-                        y = utils.lmap(
-                            y,
-                            [-1, 1],
-                            [self.features_range["y"][0], self.features_range["y"][1]],
-                        )
-                    cell = (
-                        int((x - self.grid_size[0, 0]) / self.grid_step[0]),
-                        int((y - self.grid_size[1, 0]) / self.grid_step[1]),
-                    )
-                    if (
-                        0 <= cell[1] < self.grid.shape[-2]
-                        and 0 <= cell[0] < self.grid.shape[-1]
-                    ):
+                        y = utils.lmap(y, [-1, 1], [self.features_range["y"][0], self.features_range["y"][1]])
+                    cell = (int((x - self.grid_size[0, 0]) / self.grid_step[0]),
+                            int((y - self.grid_size[1, 0]) / self.grid_step[1]))
+                    if 0 <= cell[1] < self.grid.shape[-2] and 0 <= cell[0] < self.grid.shape[-1]:
                         self.grid[layer, cell[1], cell[0]] = vehicle[feature]
             # Clip
             obs = np.clip(self.grid, -1, 1)
@@ -422,78 +365,51 @@ class OccupancyGridObservation(ObservationType):
 
 
 class KinematicsGoalObservation(KinematicObservation):
-    def __init__(self, env: "AbstractEnv", scales: List[float], **kwargs: dict) -> None:
+    def __init__(self, env: 'AbstractEnv', scales: List[float], **kwargs: dict) -> None:
         self.scales = np.array(scales)
         super().__init__(env, **kwargs)
 
     def space(self) -> spaces.Space:
         try:
             obs = self.observe()
-            return spaces.Dict(
-                dict(
-                    desired_goal=spaces.Box(
-                        -np.inf,
-                        np.inf,
-                        shape=obs["desired_goal"].shape,
-                        dtype=np.float32,
-                    ),
-                    achieved_goal=spaces.Box(
-                        -np.inf,
-                        np.inf,
-                        shape=obs["achieved_goal"].shape,
-                        dtype=np.float32,
-                    ),
-                    observation=spaces.Box(
-                        -np.inf,
-                        np.inf,
-                        shape=obs["observation"].shape,
-                        dtype=np.float32,
-                    ),
-                )
-            )
+            return spaces.Dict(dict(
+                desired_goal=spaces.Box(-np.inf, np.inf, shape=obs["desired_goal"].shape, dtype=np.float32),
+                achieved_goal=spaces.Box(-np.inf, np.inf, shape=obs["achieved_goal"].shape, dtype=np.float32),
+                observation=spaces.Box(-np.inf, np.inf, shape=obs["observation"].shape, dtype=np.float32),
+            ))
         except AttributeError:
             return spaces.Space()
 
     def observe(self) -> Dict[str, np.ndarray]:
         if not self.observer_vehicle:
             return {
-                "observation": np.zeros((len(self.features),)),
-                "achieved_goal": np.zeros((len(self.features),)),
-                "desired_goal": np.zeros((len(self.features),)),
-            }
+            "observation": np.zeros((len(self.features),)),
+            "achieved_goal": np.zeros((len(self.features),)),
+            "desired_goal": np.zeros((len(self.features),))
+        }
 
-        obs = np.ravel(
-            pd.DataFrame.from_records([self.observer_vehicle.to_dict()])[self.features]
-        )
-        goal = np.ravel(
-            pd.DataFrame.from_records([self.env.goal.to_dict()])[self.features]
-        )
+        obs = np.ravel(pd.DataFrame.from_records([self.observer_vehicle.to_dict()])[self.features])
+        goal = np.ravel(pd.DataFrame.from_records([self.env.goal.to_dict()])[self.features])
         obs = {
             "observation": obs / self.scales,
             "achieved_goal": obs / self.scales,
-            "desired_goal": goal / self.scales,
+            "desired_goal": goal / self.scales
         }
         return obs
 
 
 class AttributesObservation(ObservationType):
-    def __init__(
-        self, env: "AbstractEnv", attributes: List[str], **kwargs: dict
-    ) -> None:
+    def __init__(self, env: 'AbstractEnv', attributes: List[str], **kwargs: dict) -> None:
         self.env = env
         self.attributes = attributes
 
     def space(self) -> spaces.Space:
         try:
             obs = self.observe()
-            return spaces.Dict(
-                {
-                    attribute: spaces.Box(
-                        -np.inf, np.inf, shape=obs[attribute].shape, dtype=np.float32
-                    )
-                    for attribute in self.attributes
-                }
-            )
+            return spaces.Dict({
+                attribute: spaces.Box(-np.inf, np.inf, shape=obs[attribute].shape, dtype=np.float32)
+                for attribute in self.attributes
+            })
         except AttributeError:
             return spaces.Space()
 
@@ -502,9 +418,153 @@ class AttributesObservation(ObservationType):
             attribute: getattr(self.env, attribute) for attribute in self.attributes
         }
 
+class LidarObservation(ObservationType):
+    DISTANCE = 0
+    SPEED = 1
+
+    def __init__(
+        self,
+        env,
+        cells: int = 64,
+        maximum_range: float = 150,
+        normalize: bool = True,
+        **kwargs
+    ):
+        super().__init__(env, **kwargs)
+        self.cells = cells
+        self.maximum_range = maximum_range
+        self.normalize = normalize
+        self.angle = np.array(2 * np.pi / self.cells)
+        self.grid = np.ones((self.cells, 1)) * float("inf")
+        self.origin = None
+
+        self.directions = [np.array([np.cos(index * self.angle), np.sin(index * self.angle)]) for index in range(self.cells)]
+
+    def space(self) -> spaces.Space:
+        high = 1 if self.normalize else self.maximum_range
+        # return spaces.Box(shape=(self.cells, 2), low=-high, high=high, dtype=np.float32)
+        # return spaces.Box(shape=(self.cells+1, 2), low=-high, high=high, dtype=np.float32)
+        return spaces.Box(shape=(self.cells+2, 2), low=-high, high=high, dtype=np.float32)
+
+        #return spaces.Dict({
+                #"lidar": spaces.Box(shape=(self.cells, 2), low=-high, high=high, dtype=np.float32),
+                #"ego": spaces.Box(shape=(4,), low=-1, high=1)
+                #})
+
+    def observe(self):
+        # obs = self.trace(
+            # self.observer_vehicle.position, self.observer_vehicle.velocity
+        # ).copy()
+        # if self.normalize:
+            # obs /= self.maximum_range
+        # return obs
+
+        self.grid = utils.trace(self.observer_vehicle.position, self.observer_vehicle.velocity, self.maximum_range, self.cells, self.angle, self.env.road.vehicles + self.env.road.objects, self.observer_vehicle)
+        self.origin = self.observer_vehicle.position.copy()
+        obs = self.grid.copy()
+        if self.normalize:
+            # normalize distances
+            obs[:, 0] /= self.maximum_range
+            # normalize velocities
+            obs[:, 1] = [utils.lmap(x, [-1.5 * MDPVehicle.SPEED_MAX, 1.5 * MDPVehicle.SPEED_MAX], [-1, 1] ) for x in obs[:,1]]
+
+
+        # add the current position of the ego vehicle to the observation
+        ego_obs = self.observer_vehicle.to_dict()
+        ego_pos = np.array([ego_obs["x"], ego_obs["y"], ego_obs["vx"], ego_obs["vy"]])
+
+        # replace x position with distance to exit
+        self.exit_lane = self.env.road.network.get_lane(('c','d', 1))
+
+        distance_to_exit = self.exit_lane.distance(self.observer_vehicle.position)
+        ego_pos[0] = distance_to_exit
+
+        # normalize ego_pos same as in KinematicObservation
+        #ego_pos[0] = utils.lmap(ego_pos[0], [-5.0 * MDPVehicle.SPEED_MAX, 5.0 * MDPVehicle.SPEED_MAX], [-1, 1])
+        #ego_pos[0] = utils.lmap(ego_pos[0], [-460, 460], [-1, 1])
+        ego_pos[0] = utils.lmap(ego_pos[0], [-200, 200], [-1, 1])
+        ego_pos[1] = utils.lmap(ego_pos[1], [-12, 12], [-1, 1])
+        ego_pos[2] = utils.lmap(ego_pos[2], [-1.5 * MDPVehicle.SPEED_MAX, 1.5 * MDPVehicle.SPEED_MAX], [-1, 1])
+        ego_pos[3] = utils.lmap(ego_pos[3], [-1.5 * MDPVehicle.SPEED_MAX, 1.5 * MDPVehicle.SPEED_MAX], [-1, 1])
+
+        # obs = np.vstack([obs, ego_pos])
+        #obs = {"lidar": obs, "ego": ego_pos}
+        ego_pos = np.reshape(ego_pos, (2,2))
+        obs = np.vstack([obs, ego_pos])
+
+        return obs
+
+    def trace(self, origin: np.ndarray, origin_velocity: np.ndarray) -> np.ndarray:
+        self.origin = origin.copy()
+        self.grid = np.ones((self.cells, 2)) * self.maximum_range
+
+        for obstacle in self.env.road.vehicles + self.env.road.objects:
+            if obstacle is self.observer_vehicle: #or not obstacle.solid:
+                continue
+            center_distance = np.linalg.norm(obstacle.position - origin)
+            if center_distance > self.maximum_range:
+                continue
+            center_angle = self.position_to_angle(obstacle.position, origin)
+            center_index = self.angle_to_index(center_angle)
+            distance = center_distance - obstacle.WIDTH / 2
+            if distance <= self.grid[center_index, self.DISTANCE]:
+                direction = self.index_to_direction(center_index)
+                velocity = (obstacle.velocity - origin_velocity).dot(direction)
+                self.grid[center_index, :] = [distance, velocity]
+
+            # Angular sector covered by the obstacle
+            corners = utils.rect_corners(
+                obstacle.position, obstacle.LENGTH, obstacle.WIDTH, obstacle.heading
+            )
+            angles = [self.position_to_angle(corner, origin) for corner in corners]
+            min_angle, max_angle = min(angles), max(angles)
+            if (
+                min_angle < -np.pi / 2 < np.pi / 2 < max_angle
+            ):  # Object's corners are wrapping around +pi
+                min_angle, max_angle = max_angle, min_angle + 2 * np.pi
+            start, end = self.angle_to_index(min_angle), self.angle_to_index(max_angle)
+            if start < end:
+                indexes = np.arange(start, end + 1)
+            else:  # Object's corners are wrapping around 0
+                indexes = np.hstack(
+                    [np.arange(start, self.cells), np.arange(0, end + 1)]
+                )
+
+            # Actual distance computation for these sections
+            for index in indexes:
+                direction = self.index_to_direction(index)
+                ray = (origin, origin + self.maximum_range * direction)
+                # distance = utils.distance_to_rect(*ray, corners)
+                distance = utils.distance_to_rect2(*ray, corners, self.maximum_range)
+                # distance2 = utils.distance_to_rect(*ray, corners)
+                # assert abs(distance - distance2) < 0.0001 or distance == distance2
+                if distance <= self.grid[index, self.DISTANCE]:
+                    velocity = (obstacle.velocity - origin_velocity).dot(direction)
+                    self.grid[index, :] = [distance, velocity]
+        return self.grid
+
+    def position_to_angle(self, position: np.ndarray, origin: np.ndarray) -> float:
+        return (
+            np.arctan2(position[1] - origin[1], position[0] - origin[0])
+            + self.angle / 2
+        )
+
+    def position_to_index(self, position: np.ndarray, origin: np.ndarray) -> int:
+        return self.angle_to_index(self.position_to_angle(position, origin))
+
+    def angle_to_index(self, angle: float) -> int:
+        return int(np.floor(angle / self.angle)) % self.cells
+
+    def index_to_direction(self, index: np.ndarray) -> np.ndarray:
+        # return np.array([np.cos(index * self.angle), np.sin(index * self.angle)])
+        return self.directions[index]
+
 
 class MultiAgentObservation(ObservationType):
-    def __init__(self, env: "AbstractEnv", observation_config: dict, **kwargs) -> None:
+    def __init__(self,
+                 env: 'AbstractEnv',
+                 observation_config: dict,
+                 **kwargs) -> None:
         super().__init__(env)
         self.observation_config = observation_config
         self.agents_observation_types = []
@@ -514,15 +574,13 @@ class MultiAgentObservation(ObservationType):
             self.agents_observation_types.append(obs_type)
 
     def space(self) -> spaces.Space:
-        return spaces.Tuple(
-            [obs_type.space() for obs_type in self.agents_observation_types]
-        )
+        return spaces.Tuple([obs_type.space() for obs_type in self.agents_observation_types])
 
     def observe(self) -> tuple:
         return tuple(obs_type.observe() for obs_type in self.agents_observation_types)
 
 
-def observation_factory(env: "AbstractEnv", config: dict) -> ObservationType:
+def observation_factory(env: 'AbstractEnv', config: dict) -> ObservationType:
     if config["type"] == "TimeToCollision":
         return TimeToCollisionObservation(env, **config)
     elif config["type"] == "Kinematics":
@@ -535,6 +593,8 @@ def observation_factory(env: "AbstractEnv", config: dict) -> ObservationType:
         return GrayscaleObservation(env, config)
     elif config["type"] == "AttributesObservation":
         return AttributesObservation(env, **config)
+    elif config["type"] == "LidarObservation":
+        return LidarObservation(env, **config)
     elif config["type"] == "MultiAgentObservation":
         return MultiAgentObservation(env, **config)
     else:

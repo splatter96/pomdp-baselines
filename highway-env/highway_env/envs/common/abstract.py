@@ -110,7 +110,8 @@ class AbstractEnv(gym.Env):
         """
         return {
             "observation": {
-                "type": "Kinematics"
+                # "type": "Kinematics"
+                "type": "LidarObservation"
             },
             "action": {
                 "type": "DiscreteMetaAction"
@@ -204,7 +205,8 @@ class AbstractEnv(gym.Env):
         self.road.initial_vehicles = deepcopy(self.road.vehicles)
 
         # return np.asarray(obs).reshape((len(obs), -1)), np.array(available_actions)
-        return np.asarray(obs).reshape((len(obs), -1)), {}
+        #return np.asarray(obs).reshape((len(obs), -1)), {}
+        return obs, {}
 
     def _reset(self, num_CAV=1) -> None:
         """

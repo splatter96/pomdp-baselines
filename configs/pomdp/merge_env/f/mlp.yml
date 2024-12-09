@@ -13,13 +13,13 @@ env:
   lane_change_reward: -0.05
   reward_speed_range: [10, 30]
   collision_reward: 200
-  high_speed_reward: 1
+  high_speed_reward: 2
   safety_guarantee: false
   traffic_density: 3
   offramp_reward: 100
 
 train:
-  num_iters: 500 # number meta-training iterates
+  num_iters: 5000 # number meta-training iterates
   num_init_rollouts_pool: 5 # episodes before training
   num_rollouts_per_iter: 1
   buffer_size: 500000
@@ -51,7 +51,10 @@ policy:
     entropy_alpha: null
     automatic_entropy_tuning: true
 
-    #TODO v
+    #TODO set right target_entropy
+    #for merge env according to old SACD implementation 1.5772491541854183 = 0.98 * -log(5)
     target_entropy: 0.7 # the ratio: target_entropy = ratio * log(|A|)
+    #target_entropy: 1.577 # the ratio: target_entropy = ratio * log(|A|)
+
     alpha_lr: 0.0005
 
