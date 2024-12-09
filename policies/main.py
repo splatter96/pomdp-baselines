@@ -128,6 +128,10 @@ logger.configure(dir=log_folder, format_strs=logger_formats, precision=4)
 logger.log(f"preload cost {time.time() - t0:.2f}s")
 
 os.system(f"cp -r policies/ {log_folder}")
+
+if "merge" in v["env"]["env_name"]:
+    os.system(f"cp -r highway-env/ {log_folder}")
+
 yaml.dump(v, Path(f"{log_folder}/variant_{pid}.yml"))
 key_flags = FLAGS.get_key_flags_for_module(sys.argv[0])
 logger.log("\n".join(f.serialize() for f in key_flags) + "\n")
