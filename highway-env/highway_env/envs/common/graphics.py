@@ -4,7 +4,11 @@ import numpy as np
 import pygame
 from gymnasium.spaces import Discrete
 
-from highway_env.envs.common.action import ActionType, DiscreteMetaAction, ContinuousAction
+from highway_env.envs.common.action import (
+    ActionType,
+    DiscreteMetaAction,
+    ContinuousAction,
+)
 from highway_env.road.graphics import WorldSurface, RoadGraphics
 from highway_env.vehicle.graphics import VehicleGraphics
 
@@ -14,12 +18,11 @@ if TYPE_CHECKING:
 
 
 class EnvViewer(object):
-
     """A viewer to render a highway driving environment."""
 
     SAVE_IMAGES = False
 
-    def __init__(self, env: 'AbstractEnv') -> None:
+    def __init__(self, env: "AbstractEnv") -> None:
         self.env = env
         self.offscreen = env.config["offscreen_rendering"]
 
@@ -31,10 +34,16 @@ class EnvViewer(object):
         # instruction allows the drawing to be done on surfaces without
         # handling a screen display, useful for e.g. cloud computing
         if not self.offscreen:
-            self.screen = pygame.display.set_mode([self.env.config["screen_width"], self.env.config["screen_height"]])
+            self.screen = pygame.display.set_mode(
+                [self.env.config["screen_width"], self.env.config["screen_height"]]
+            )
         self.sim_surface = WorldSurface(panel_size, 0, pygame.Surface(panel_size))
-        self.sim_surface.scaling = env.config.get("scaling", self.sim_surface.INITIAL_SCALING)
-        self.sim_surface.centering_position = env.config.get("centering_position", self.sim_surface.INITIAL_CENTERING)
+        self.sim_surface.scaling = env.config.get(
+            "scaling", self.sim_surface.INITIAL_SCALING
+        )
+        self.sim_surface.centering_position = env.config.get(
+            "centering_position", self.sim_surface.INITIAL_CENTERING
+        )
         self.clock = pygame.time.Clock()
 
         self.enabled = True
@@ -58,15 +67,25 @@ class EnvViewer(object):
         if self.agent_display is None:
             if not self.offscreen:
                 if self.env.config["screen_width"] > self.env.config["screen_height"]:
-                    self.screen = pygame.display.set_mode((self.env.config["screen_width"],
-                                                           2 * self.env.config["screen_height"]))
+                    self.screen = pygame.display.set_mode(
+                        (
+                            self.env.config["screen_width"],
+                            2 * self.env.config["screen_height"],
+                        )
+                    )
                 else:
-                    self.screen = pygame.display.set_mode((2 * self.env.config["screen_width"],
-                                                           self.env.config["screen_height"]))
-            self.agent_surface = pygame.Surface((self.env.config["screen_width"], self.env.config["screen_height"]))
+                    self.screen = pygame.display.set_mode(
+                        (
+                            2 * self.env.config["screen_width"],
+                            self.env.config["screen_height"],
+                        )
+                    )
+            self.agent_surface = pygame.Surface(
+                (self.env.config["screen_width"], self.env.config["screen_height"])
+            )
         self.agent_display = agent_display
 
-    def set_agent_action_sequence(self, actions: List['Action']) -> None:
+    def set_agent_action_sequence(self, actions: List["Action"]) -> None:
         """
         Set the sequence of actions chosen by the agent, so that it can be displayed
 
@@ -75,10 +94,12 @@ class EnvViewer(object):
         if isinstance(self.env.action_space, Discrete):
             actions = [self.env.ACTIONS[a] for a in actions]
         if len(actions) > 1:
-            self.vehicle_trajectory = self.env.vehicle.predict_trajectory(actions,
-                                                                          1 / self.env.config["policy_frequency"],
-                                                                          1 / 3 / self.env.config["policy_frequency"],
-                                                                          1 / self.env.config["simulation_frequency"])
+            self.vehicle_trajectory = self.env.vehicle.predict_trajectory(
+                actions,
+                1 / self.env.config["policy_frequency"],
+                1 / 3 / self.env.config["policy_frequency"],
+                1 / self.env.config["simulation_frequency"],
+            )
 
     def handle_events(self) -> None:
         """Handle pygame events by forwarding them to the display and environment vehicle."""
@@ -86,12 +107,12 @@ class EnvViewer(object):
             if event.type == pygame.QUIT:
                 self.env.close()
             elif event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE:
-                    paused = True
-                    while paused:
-                        pygame.time.wait(1000)
-                        for event in pygame.event.get():
-                            if event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE:
-                                paused = False
+                paused = True
+                while paused:
+                    pygame.time.wait(1000)
+                    for event in pygame.event.get():
+                        if event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE:
+                            paused = False
 
             self.sim_surface.handle_event(event)
             if self.env.action_type:
@@ -107,29 +128,31 @@ class EnvViewer(object):
 
         if self.vehicle_trajectory:
             VehicleGraphics.display_trajectory(
-                self.vehicle_trajectory,
-                self.sim_surface,
-                offscreen=self.offscreen)
+                self.vehicle_trajectory, self.sim_surface, offscreen=self.offscreen
+            )
 
         RoadGraphics.display_road_objects(
-            self.env.road,
-            self.sim_surface,
-            offscreen=self.offscreen
+            self.env.road, self.sim_surface, offscreen=self.offscreen
         )
 
         RoadGraphics.display_traffic(
             self.env.road,
             self.sim_surface,
             simulation_frequency=self.env.config["simulation_frequency"],
-            offscreen=self.offscreen)
+            offscreen=self.offscreen,
+        )
 
         if self.agent_display:
             self.agent_display(self.agent_surface, self.sim_surface)
             if not self.offscreen:
                 if self.env.config["screen_width"] > self.env.config["screen_height"]:
-                    self.screen.blit(self.agent_surface, (0, self.env.config["screen_height"]))
+                    self.screen.blit(
+                        self.agent_surface, (0, self.env.config["screen_height"])
+                    )
                 else:
-                    self.screen.blit(self.agent_surface, (self.env.config["screen_width"], 0))
+                    self.screen.blit(
+                        self.agent_surface, (self.env.config["screen_width"], 0)
+                    )
 
         ObservationGraphics.display(self.env.observation_type, self.sim_surface)
 
@@ -140,12 +163,19 @@ class EnvViewer(object):
             pygame.display.flip()
 
         if self.SAVE_IMAGES and self.directory:
-            pygame.image.save(self.sim_surface, str(self.directory / "highway-env_{}.png".format(self.frame)))
+            pygame.image.save(
+                self.sim_surface,
+                str(self.directory / "highway-env_{}.png".format(self.frame)),
+            )
             self.frame += 1
 
     def get_image(self) -> np.ndarray:
         """the rendered image as a rbg array."""
-        surface = self.screen if self.env.config["render_agent"] and not self.offscreen else self.sim_surface
+        surface = (
+            self.screen
+            if self.env.config["render_agent"] and not self.offscreen
+            else self.sim_surface
+        )
         data = pygame.surfarray.array3d(surface)
         return np.moveaxis(data, 0, 1)
 
@@ -160,7 +190,9 @@ class EnvViewer(object):
 
 class EventHandler(object):
     @classmethod
-    def handle_event(cls, action_type: ActionType, event: pygame.event.EventType) -> None:
+    def handle_event(
+        cls, action_type: ActionType, event: pygame.event.EventType
+    ) -> None:
         """
         Map the pygame keyboard events to control decisions
 
@@ -173,7 +205,9 @@ class EventHandler(object):
             cls.handle_continuous_action_event(action_type, event)
 
     @classmethod
-    def handle_discrete_action_event(cls, action_type: DiscreteMetaAction, event: pygame.event.EventType) -> None:
+    def handle_discrete_action_event(
+        cls, action_type: DiscreteMetaAction, event: pygame.event.EventType
+    ) -> None:
         if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_RIGHT and action_type.longitudinal:
                 action_type.act(action_type.actions_indexes["FASTER"])
@@ -185,7 +219,9 @@ class EventHandler(object):
                 action_type.act(action_type.actions_indexes["LANE_LEFT"])
 
     @classmethod
-    def handle_continuous_action_event(cls, action_type: ContinuousAction, event: pygame.event.EventType) -> None:
+    def handle_continuous_action_event(
+        cls, action_type: ContinuousAction, event: pygame.event.EventType
+    ) -> None:
         action = action_type.last_action.copy()
         steering_index = action_type.space().shape[0] - 1
         if event.type == pygame.KEYDOWN:
@@ -208,8 +244,9 @@ class EventHandler(object):
                 action[0] = 0
         action_type.act(action)
 
+
 class ObservationGraphics(object):
-    COLOR = (0, 0, 0)
+    COLORS = [(255, 0, 0), (0, 255, 0), (0, 0, 255), (0, 0, 0)]
 
     @classmethod
     def display(cls, obs, sim_surface):
@@ -232,13 +269,17 @@ class ObservationGraphics(object):
         r = np.repeat(
             np.minimum(lidar_observation.grid[:, 0], lidar_observation.maximum_range), 2
         )
-        points = [
-            (
-                surface.pos2pix(
-                    lidar_observation.origin[0] + r[i] * np.cos(psi[i]),
-                    lidar_observation.origin[1] + r[i] * np.sin(psi[i]),
+        for j in range(4):
+            stepsize = int(np.size(psi) / 4)
+            points = [
+                (
+                    surface.pos2pix(
+                        lidar_observation.origin[0]
+                        + r[i + stepsize * j] * np.cos(psi[i + stepsize * j]),
+                        lidar_observation.origin[1]
+                        + r[i + stepsize * j] * np.sin(psi[i + stepsize * j]),
+                    )
                 )
-            )
-            for i in range(np.size(psi))
-        ]
-        pygame.draw.lines(surface, ObservationGraphics.COLOR, True, points, 1)
+                for i in range(stepsize)
+            ]
+            pygame.draw.lines(surface, ObservationGraphics.COLORS[j], False, points, 1)

@@ -52,7 +52,7 @@ def env_step(env, action, render=False):
 
     if render:
         env.render()
-        time.sleep(0.2)
+        time.sleep(0.1)
 
     # TODO add more general observation preprocessor
     next_obs = next_obs.flatten()

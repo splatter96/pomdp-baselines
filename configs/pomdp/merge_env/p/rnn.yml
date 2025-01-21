@@ -15,7 +15,7 @@ env:
   collision_reward: 200
   high_speed_reward: 2
   safety_guarantee: false
-  traffic_density: 3
+  traffic_density: 1
   offramp_reward: 100
 
 train:
@@ -36,7 +36,7 @@ eval:
   log_tensorboard: true
 
 policy:
-  separate: True
+  separate: true
   seq_model: lstm # [lstm, gru]
   algo_name: sacd # only support sac-discrete
 
@@ -52,7 +52,7 @@ policy:
   tau: 0.005
 
   sacd:
-    entropy_alpha: null
+    entropy_alpha:
     automatic_entropy_tuning: true
     target_entropy: 0.7 # the ratio: target_entropy = ratio * log(|A|)
     alpha_lr: 0.0005

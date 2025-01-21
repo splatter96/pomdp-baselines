@@ -38,13 +38,13 @@ class SingleAgentMergeEnv(AbstractEnv):
             "lane_change_reward": -0.05,
             "reward_speed_range": [10, 30],
             "collision_reward": 200,
-            "high_speed_reward": 3,
+            "high_speed_reward": 1,
             "offramp_reward": 100,
             "HEADWAY_COST": 4,  # default=1
             #"HEADWAY_COST": 1,  # default=1
             "HEADWAY_TIME": 1.2,  # default=1.2[s]
             "MERGING_LANE_COST": 0,  # default=4
-            "LANE_CHANGE_COST": 1,  # default=0.5
+            "LANE_CHANGE_COST": 4,  # default=0.5
             #"LANE_CHANGE_COST": 0.5,  # default=0.5
             "traffic_density": 1,  # easy or hard modes
         })

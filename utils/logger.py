@@ -8,6 +8,8 @@ import dateutil.tz
 import tempfile
 from collections import OrderedDict, Set
 
+import wandb
+
 try:
     from torch.utils.tensorboard import SummaryWriter
 except:
@@ -75,7 +77,7 @@ class HumanOutputFormat(KVWriter, SeqWriter):
     def writekvs(self, kvs):
         # Create strings for printing
         key2str = {}
-        for (key, val) in sorted(kvs.items()):
+        for key, val in sorted(kvs.items()):
             if isinstance(val, float):
                 valstr = "%-8.3g" % (val,)
             else:
@@ -97,7 +99,7 @@ class HumanOutputFormat(KVWriter, SeqWriter):
         dashes = "-" * (keywidth + valwidth + 7)
         dashes_time = put_in_middle(dashes, timestamp)
         lines = [dashes_time]
-        for (key, val) in sorted(key2str.items()):
+        for key, val in sorted(key2str.items()):
             lines.append(
                 "| %s%s | %s%s |"
                 % (
@@ -157,7 +159,7 @@ class CSVOutputFormat(KVWriter):
             self.file.seek(0)
             lines = self.file.readlines()
             self.file.seek(0)
-            for (i, k) in enumerate(self.keys):
+            for i, k in enumerate(self.keys):
                 if i > 0:
                     self.file.write(",")
                 self.file.write(k)
@@ -166,7 +168,7 @@ class CSVOutputFormat(KVWriter):
                 self.file.write(line[:-1])
                 self.file.write(self.sep * len(extra_keys))
                 self.file.write("\n")
-        for (i, k) in enumerate(self.keys):
+        for i, k in enumerate(self.keys):
             if i > 0:
                 self.file.write(",")
             v = kvs.get(k)
@@ -201,13 +203,43 @@ class TensorBoardOutputFormat(KVWriter):
     def set_step(self, step):
         self.step = step
 
+    def write_hparams(self, hparam_dict):
+        # self.writer.add_hparams(hparam_dict)
+        # self.writer.add_text("Configuration", ez_yaml.to_string(hparam_dict))
+        self.writer.add_text("Configuration", "some random shit i write here")
+
     def close(self):
         if self.writer:
             self.writer.Close()
             self.writer = None
 
 
-def make_output_format(format, ev_dir, log_suffix=""):
+class WandbOutputFormat(KVWriter):
+    """
+    Dumps key/value pairs into wandb's numeric format.
+    """
+
+    def __init__(self, dir, config):
+        self.step = 0
+        wandb.init(
+            project="pomdp_test",
+            config=config,
+            name=dir,
+        )
+
+    def writekvs(self, kvs):
+        for k, v in kvs.items():
+            # self.writer.add_scalar(k, v, self.step)
+            wandb.log({k: v}, self.step)
+
+    def set_step(self, step):
+        self.step = step
+
+    def close(self):
+        wandb.finish()
+
+
+def make_output_format(format, ev_dir, config, log_suffix=""):
     os.makedirs(ev_dir, exist_ok=True)
     if format == "stdout":
         return HumanOutputFormat(sys.stdout)
@@ -219,6 +251,8 @@ def make_output_format(format, ev_dir, log_suffix=""):
         return CSVOutputFormat(osp.join(ev_dir, "progress.csv"))
     elif format == "tensorboard":
         return TensorBoardOutputFormat(ev_dir)
+    elif format == "wandb":
+        return WandbOutputFormat(ev_dir, config)
     else:
         raise ValueError("Unknown format specified: %s" % (format,))
 
@@ -248,7 +282,7 @@ def logkvs(d):
     """
     Log a dictionary of key-value pairs
     """
-    for (k, v) in d.items():
+    for k, v in d.items():
         logkv(k, v)
 
 
@@ -429,7 +463,7 @@ Logger.DEFAULT = Logger.CURRENT = Logger(
 )
 
 
-def configure(dir=None, format_strs=None, log_suffix="", precision=None):
+def configure(config, dir=None, format_strs=None, log_suffix="", precision=None):
     if dir is None:
         dir = os.getenv("OPENAI_LOGDIR")
     if dir is None:
@@ -443,7 +477,9 @@ def configure(dir=None, format_strs=None, log_suffix="", precision=None):
     if format_strs is None:
         strs = os.getenv("OPENAI_LOG_FORMAT")
         format_strs = strs.split(",") if strs else LOG_OUTPUT_FORMATS
-    output_formats = [make_output_format(f, dir, log_suffix) for f in format_strs]
+    output_formats = [
+        make_output_format(f, dir, config, log_suffix) for f in format_strs
+    ]
 
     Logger.CURRENT = Logger(dir=dir, output_formats=output_formats, precision=precision)
     log("Logging to %s" % dir)

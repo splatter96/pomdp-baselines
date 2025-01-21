@@ -532,6 +532,27 @@ class Learner:
                             obs, deterministic=deterministic
                         )
 
+                    # torch.onnx.export(
+                    #     self.agent.actor,
+                    #     (action.unsqueeze(0), reward.unsqueeze(0), obs.unsqueeze(0)),
+                    #     "agent.onnx",
+                    #     input_names=["action, reward, obs"],
+                    #     output_names=["action"],
+                    # )
+                    # def forward(self, prev_actions, rewards, observs, current_actions):
+                    # torch.onnx.export(
+                    #     self.agent.critic,
+                    #     (
+                    #         action.unsqueeze(0),
+                    #         reward.unsqueeze(0),
+                    #         obs.unsqueeze(0),
+                    #         action.unsqueeze(0),
+                    #     ),
+                    #     "critic.onnx",
+                    #     input_names=["prev_action, reward, obs, current_actions"],
+                    #     # output_names=["action"],
+                    # )
+                    #
                     # observe reward and next obs
                     next_obs, reward, done, info = utl.env_step(
                         self.eval_env, action.squeeze(dim=0), render
@@ -649,6 +670,11 @@ class Learner:
     def load_model(self, ckpt_path):
         self.agent.load_state_dict(torch.load(ckpt_path, map_location=ptu.device))
         print("load successfully from", ckpt_path)
+
+        # action = ptu.FloatTensor([self.train_env.action_space.sample()])
+        # obs = ptu.FloatTensor([self.train_env.observation_space.sample()])
+        # reward = ptu.FloatTensor([0])
+        # export model to onnx
 
     def enjoy(self, chkpt_path, render, num_runs):
         self.load_model(chkpt_path)

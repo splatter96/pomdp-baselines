@@ -1,9 +1,9 @@
-""" Recommended Architecture
+"""Recommended Architecture
 Separate RNN architecture is inspired by a popular RL repo
 https://github.com/quantumiracle/Popular-RL-Algorithms/blob/master/POMDP/common/value_networks.py#L110
 which has another branch to encode current state (and action)
 
-Hidden state update functions get_hidden_state() is inspired by varibad encoder 
+Hidden state update functions get_hidden_state() is inspired by varibad encoder
 https://github.com/lmzintgraf/varibad/blob/master/models/encoder.py
 """
 
@@ -47,7 +47,7 @@ class ModelFreeOffPolicy_Separate_RNN(nn.Module):
         tau=5e-3,
         # pixel obs
         image_encoder_fn=lambda: None,
-        **kwargs
+        **kwargs,
     ):
         super().__init__()
 

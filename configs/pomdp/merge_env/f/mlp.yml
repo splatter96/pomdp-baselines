@@ -1,4 +1,4 @@
-seed: 73
+seed: 21
 cuda: 0 # use_gpu
 env:
   env_type: pomdp

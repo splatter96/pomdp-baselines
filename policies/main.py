@@ -121,11 +121,16 @@ if seq_model != "mlp":
 
 os.makedirs(exp_id, exist_ok=True)
 log_folder = os.path.join(exp_id, system.now_str())
-logger_formats = ["stdout", "log", "csv"]
+logger_formats = ["stdout", "log", "csv", "wandb"]
 if v["eval"]["log_tensorboard"]:
     logger_formats.append("tensorboard")
-logger.configure(dir=log_folder, format_strs=logger_formats, precision=4)
+logger.configure(v, dir=log_folder, format_strs=logger_formats, precision=4)
 logger.log(f"preload cost {time.time() - t0:.2f}s")
+
+# print(v)
+# print(type(v))
+# logger.write_hparams(v)
+# exit(0)
 
 os.system(f"cp -r policies/ {log_folder}")
 

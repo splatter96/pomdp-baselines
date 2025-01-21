@@ -217,12 +217,17 @@ def trace(np.ndarray[double, ndim=1] origin, np.ndarray[double, ndim=1] origin_v
     cdef float min_angle, max_angle
     cdef int start, end, index
 
+    cdef int num_radars, cells_per_radar
+    num_radars = 4
+    cells_per_radar = cells / num_radars
+
     cdef float[4] corners_x, corners_y
 
     cdef np.ndarray[double, ndim=2] grid
 
-    grid = np.ones((cells, 2)) * maximum_range
+    grid = np.ones((cells, 3)) * maximum_range
     grid[:, 1] = 0
+    grid[:, 2] = -1
 
     cdef double [:,:] grid_view = grid
 
@@ -240,6 +245,7 @@ def trace(np.ndarray[double, ndim=1] origin, np.ndarray[double, ndim=1] origin_v
             velocity = c_dot(obstacle.velocity - origin_velocity, direction)
             grid_view[center_index, 0] = distance
             grid_view[center_index, 1] = velocity
+            grid_view[center_index, 2] = obstacle.id
 
         # Angular sector covered by the obstacle
         rect_corners2(obstacle.position, obstacle.LENGTH, obstacle.WIDTH, obstacle.heading, corners_x, corners_y)
@@ -263,6 +269,7 @@ def trace(np.ndarray[double, ndim=1] origin, np.ndarray[double, ndim=1] origin_v
                 velocity = c_dot(obstacle.velocity - origin_velocity, direction)
                 grid_view[index, 0] = distance
                 grid_view[index, 1] = velocity
+                grid_view[index, 2] = obstacle.id
     return grid
 
 cdef inline float position_to_angle(float x, float y, origin: np.ndarray, angle: float):
