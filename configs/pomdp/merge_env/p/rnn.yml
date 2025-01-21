@@ -17,6 +17,7 @@ env:
   safety_guarantee: false
   traffic_density: 1
   offramp_reward: 100
+  dutycycle: [1,2]
 
 train:
   num_iters: 5000 # number meta-training iterates
