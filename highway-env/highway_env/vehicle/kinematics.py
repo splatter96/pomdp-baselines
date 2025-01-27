@@ -36,7 +36,12 @@ class Vehicle(object):
     """ Maximum reachable speed [m/s] """
 
     def __init__(
-        self, road: Road, position: Vector, heading: float = 0.0, speed: float = 0.0
+        self,
+        road: Road,
+        position: Vector,
+        heading: float = 0.0,
+        speed: float = 0.0,
+        config=None,
     ):
         self.road = road
         # self.position = np.array(position, dtype=float)
@@ -58,9 +63,16 @@ class Vehicle(object):
         self.history = deque(maxlen=30)
 
         # for interference calculation
-        self.dutycycle = (
-            np.random.randint(1, 4) / 100
-        )  # [% / 100] dutycycle of the radar usage
+        dutycycle = config.get("dutycycle", None)
+        if dutycycle is not None:
+            self.dutycycle = (
+                np.random.randint(dutycycle[0], dutycycle[1]) / 100
+            )  # [% / 100] dutycycle of the radar usage
+        else:
+            self.dutycycle = (
+                np.random.randint(1, 2) / 100
+            )  # [% / 100] dutycycle of the radar usage
+
         self.dutycycle_offset = (
             np.random.randint(0, 20) / 1000
         )  # [ms] offset in milliseconds
