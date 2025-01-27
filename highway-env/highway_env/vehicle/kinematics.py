@@ -59,7 +59,7 @@ class Vehicle(object):
 
         # for interference calculation
         self.dutycycle = (
-            np.random.randint(1, 2) / 100
+            np.random.randint(1, 4) / 100
         )  # [% / 100] dutycycle of the radar usage
         self.dutycycle_offset = (
             np.random.randint(0, 20) / 1000
