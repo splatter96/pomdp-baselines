@@ -229,8 +229,8 @@ class WandbOutputFormat(KVWriter):
 
     def writekvs(self, kvs):
         for k, v in kvs.items():
-            # self.writer.add_scalar(k, v, self.step)
-            wandb.log({k: v}, self.step)
+            #print(f"Loggin {k} with {v}")
+            wandb.log({k: v})
 
     def set_step(self, step):
         self.step = step

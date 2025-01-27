@@ -343,6 +343,8 @@ class Learner:
         """
 
         before_env_steps = self._n_env_steps_total
+        crashes = 0
+        merges = 0
         for idx in range(num_rollouts):
             steps = 0
 
@@ -436,6 +438,11 @@ class Learner:
                 # set: obs <- next_obs
                 obs = next_obs.clone()
 
+                if "crashed" in info and info["crashed"] == True:
+                    crashes += 1
+                elif "merged" in info and info["merged"] == True and done_rollout:
+                    merges += 1
+
             if self.agent_arch in [AGENT_ARCHS.Memory, AGENT_ARCHS.Memory_Markov]:
                 # add collected sequence to buffer
                 act_buffer = torch.cat(act_list, dim=0)  # (L, dim)
@@ -458,6 +465,10 @@ class Learner:
                 )
             self._n_env_steps_total += steps
             self._n_rollouts_total += 1
+
+        logger.record_tabular("merge/crashrate", crashes/num_rollouts)
+        logger.record_tabular("merge/mergerate", merges/num_rollouts)
+        logger.dump_tabular()
         return self._n_env_steps_total - before_env_steps
 
     def sample_rl_batch(self, batch_size):
