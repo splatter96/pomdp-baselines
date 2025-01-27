@@ -9,6 +9,8 @@ from torch.nn import functional as F
 
 from tqdm import tqdm
 
+from hydra.utils import get_original_cwd, to_absolute_path
+
 # import gym
 import gymnasium as gym
 
@@ -72,7 +74,7 @@ class Learner:
             import envs.pomdp
 
             # import envs.credit_assign
-            sys.path.append("./highway-env/")
+            sys.path.append(to_absolute_path("highway-env"))
             import highway_env
 
             assert num_eval_tasks > 0
