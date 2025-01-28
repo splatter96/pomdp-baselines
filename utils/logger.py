@@ -222,9 +222,10 @@ class WandbOutputFormat(KVWriter):
     def __init__(self, dir, config):
         self.step = 0
         wandb.init(
-            project="pomdp_test",
+            project="pomdp_interference",
             config=config,
             name=dir,
+            save_code=True,
         )
 
     def writekvs(self, kvs):

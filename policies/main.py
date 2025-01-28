@@ -1,5 +1,6 @@
 # -*- coding: future_fstrings -*-
 import sys, os, time
+import glob
 
 t0 = time.time()
 import socket
@@ -18,6 +19,7 @@ from policies.learner import Learner
 import hydra
 from hydra.utils import get_original_cwd, to_absolute_path
 import omegaconf
+import wandb
 
 # FLAGS = flags.FLAGS
 # flags.DEFINE_string("cfg", None, "path to configuration file")
@@ -139,15 +141,30 @@ def main(cfg: "DictConfig"):  # noqa: F821
     logger.configure(v, dir=log_folder, format_strs=logger_formats, precision=4)
     logger.log(f"preload cost {time.time() - t0:.2f}s")
 
-    # print(v)
-    # print(type(v))
-    # logger.write_hparams(v)
-    # exit(0)
-
     os.system(f"cp -r {to_absolute_path('policies')}/ {log_folder}")
 
     if "merge" in cfg.env.env_name:
         os.system(f"cp -r {to_absolute_path('highway-env')}/ {log_folder}")
+
+        print(f"Working directory : {os.getcwd()}")
+        artifact = wandb.run.log_code(
+            f"{to_absolute_path('highway-env')}",
+            name="Simulation_Code",
+            include_fn=lambda path: path.endswith(".py")
+            or path.endswith(".pyx")
+            or path.endswith("c_utils.c"),
+        )
+        wandb.run.log_artifact(artifact)
+        wandb.run.use_artifact(artifact, type="code")
+        artifact.wait()
+
+        artifact = wandb.run.log_code(
+            f"{to_absolute_path('policies')}",
+            name="Training_Code",
+        )
+        wandb.run.log_artifact(artifact)
+        wandb.run.use_artifact(artifact, type="code")
+        artifact.wait()
 
     # yaml.dump(v, Path(f"{log_folder}/variant_{pid}.yml"))
     # key_flags = FLAGS.get_key_flags_for_module(sys.argv[0])
