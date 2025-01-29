@@ -1,0 +1,17 @@
+program: policies/main.py
+name: interference_sweep
+method: grid
+metric:
+  goal: maximize
+  name: metrics/return_eval_total
+parameters:
+  env.dutycycle:
+    distribution: categorical
+    values: [[1,2], [1,4], [1,6], [1,8]]
+
+command:
+  - ${env}
+  - python3
+  - ${program}
+  - "hydra.job.chdir=False"
+  - ${args_no_hyphens}
