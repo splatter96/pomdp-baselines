@@ -173,7 +173,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         wandb.run.use_artifact(artifact, type="code")
         artifact.wait()
 
-    # yaml.dump(v, Path(f"{log_folder}/variant_{pid}.yml"))
+    yaml.dump(v, Path(f"{log_folder}/variant_{pid}.yml"))
     # key_flags = FLAGS.get_key_flags_for_module(sys.argv[0])
     # logger.log("\n".join(f.serialize() for f in key_flags) + "\n")
     logger.log("pid", pid, socket.gethostname())
