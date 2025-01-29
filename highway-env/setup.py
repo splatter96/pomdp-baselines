@@ -1,6 +1,7 @@
 #import os
 from setuptools import setup
 from Cython.Build import cythonize
+import numpy
 
 #os.environ['CFLAGS'] = '-O3 -Wall -std=c++11 -ffast-math'
 
@@ -11,6 +12,7 @@ setup(
                              "highway_env/vehicle/controller.pyx",
                              "highway_env/utils.pyx"],
                             # compiler_directives={'embedsignature': True},
-                            annotate=True)
+                            annotate=True),
+    include_dirs=[numpy.get_include()],
 )
 

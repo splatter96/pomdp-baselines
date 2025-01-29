@@ -6,7 +6,12 @@ import time
 import datetime
 import dateutil.tz
 import tempfile
-from collections import OrderedDict, Set
+
+from collections import OrderedDict
+try:
+    from collections import Set
+except ImportError:
+    from collections.abc import Set
 
 import wandb
 
