@@ -154,15 +154,22 @@ def main(cfg: "DictConfig"):  # noqa: F821
             or path.endswith(".pyx")
             or path.endswith("c_utils.c"),
         )
-        wandb.run.log_artifact(artifact)
-        wandb.run.use_artifact(artifact, type="code")
         artifact.wait()
+        # wandb.run.log_artifact(artifact)
+        wandb.run.use_artifact(artifact, type="code")
 
-        artifact = wandb.run.log_code(
-            f"{to_absolute_path('policies')}",
-            name="Training_Code",
-        )
-        wandb.run.log_artifact(artifact)
+        # artifact = wandb.run.log_code(
+        #     f"{to_absolute_path('policies')}",
+        #     name="Training_Code",
+        # )
+        artifact = wandb.Artifact("NewTraining_Code", type="code")
+        paths = glob.glob("policies/**/*.py")
+        for path in paths:
+            print(path)
+            artifact.add_file(path, name=path)
+
+        # artifact.wait()
+        # wandb.run.log_artifact(artifact)
         wandb.run.use_artifact(artifact, type="code")
         artifact.wait()
 
