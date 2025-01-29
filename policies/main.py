@@ -7,7 +7,7 @@ import socket
 import numpy as np
 import torch
 
-# from ruamel.yaml import YAML
+from ruamel.yaml import YAML
 # from absl import flags
 from utils import system, logger
 from pathlib import Path
@@ -35,11 +35,11 @@ import wandb
 # flags.DEFINE_boolean("debug", False, "debug mode")
 #
 # flags.FLAGS(sys.argv)
-# yaml = YAML()
+yaml = YAML()
 #
 
 
-@hydra.main(version_base="1.1", config_path="", config_name="config")
+@hydra.main(version_base="1.1", config_path="..", config_name="config")
 def main(cfg: "DictConfig"):  # noqa: F821
     # v = yaml.load(open(FLAGS.cfg))
 

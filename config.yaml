@@ -1,0 +1,60 @@
+seed: 73
+cuda: 0 # use_gpu
+env:
+  env_type: pomdp
+  env_name: merge-single-agent-v0
+
+  num_eval_tasks: 20 # num of eval episodes
+
+  duration: 15
+  policy_frequency: 5
+  merging_speed_reward: -0.5
+  right_lane_reward: 0.1
+  lane_change_reward: -0.05
+  reward_speed_range: [10, 30]
+  collision_reward: 200
+  high_speed_reward: 2
+  safety_guarantee: false
+  traffic_density: 1
+  offramp_reward: 100
+  dutycycle: [1,2]
+
+train:
+  num_iters: 5000 # number meta-training iterates
+  num_init_rollouts_pool: 5 # before training
+  num_rollouts_per_iter: 10
+
+  buffer_size: 500000
+  batch_size: 256 # to tune based on sampled_seq_len
+  num_updates_per_iter: 16
+  sampled_seq_len: -1 # -1 is all, or positive integer
+  sample_weight_baseline: 0.0
+
+eval:
+  eval_stochastic: false # also eval stochastic policy
+  log_interval: 1 # num of iters
+  save_interval: -1
+  log_tensorboard: true
+
+policy:
+  separate: true
+  seq_model: lstm # [lstm, gru]
+  algo_name: sacd # only support sac-discrete
+
+  action_embedding_size: 8 # no action input
+  observ_embedding_size: 256
+  reward_embedding_size: 8
+  rnn_hidden_size: 128
+
+  dqn_layers: [256, 256]
+  policy_layers: [256, 256]
+  lr: 0.0005
+  gamma: 0.99
+  tau: 0.005
+
+  sacd:
+    entropy_alpha:
+    automatic_entropy_tuning: true
+    target_entropy: 0.7 # the ratio: target_entropy = ratio * log(|A|)
+    alpha_lr: 0.0005
+
