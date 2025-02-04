@@ -18,6 +18,9 @@ env:
   traffic_density: 1
   offramp_reward: 100
   dutycycle: [1,2]
+  observation:
+    type: LidarObservation
+    enable_interference: true
 
 train:
   num_iters: 5000 # number meta-training iterates
