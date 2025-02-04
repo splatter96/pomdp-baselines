@@ -604,7 +604,6 @@ class LidarObservation(ObservationType):
         #####
 
         if self.enable_interference:
-            print("interference enabled")
             # add radar index to observation
             index = np.arange(obs.shape[0])  # create index array for indexing
             cells_per_radar = self.cells / self.num_radars
