@@ -82,8 +82,8 @@ class Learner:
             self.train_env = gym.make(env_name)
             if "merge" in env_name:
                 self.train_env.config.update(kwargs)
-            # self.train_env.seed(self.seed)
-            # self.train_env.action_space.np_random.seed(self.seed)  # crucial
+            self.train_env.reset(seed=self.seed)
+            self.train_env.action_space.seed(self.seed)  # crucial
 
             self.eval_env = self.train_env
             # self.eval_env.seed(self.seed + 1)
@@ -468,8 +468,8 @@ class Learner:
             self._n_env_steps_total += steps
             self._n_rollouts_total += 1
 
-        logger.record_tabular("merge/crashrate", crashes/num_rollouts)
-        logger.record_tabular("merge/mergerate", merges/num_rollouts)
+        logger.record_tabular("merge/crashrate", crashes / num_rollouts)
+        logger.record_tabular("merge/mergerate", merges / num_rollouts)
         logger.dump_tabular()
         return self._n_env_steps_total - before_env_steps
 
