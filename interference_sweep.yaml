@@ -7,7 +7,7 @@ metric:
 parameters:
   env.dutycycle:
     distribution: categorical
-    values: [[1,2], [1,4], [1,6], [1,8]]
+    values: [[1,2], [1,4], [1,6], [1,8], [1,10], [1,12], [1,14]]
 
 command:
   - ${env}
