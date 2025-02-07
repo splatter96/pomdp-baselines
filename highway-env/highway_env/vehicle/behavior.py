@@ -159,11 +159,16 @@ class IDMVehicle(ControlledVehicle):
             self.lane_index == ("b", "c", 0) or self.lane_index == ("b", "c", 1)
         ) and self.RIGHT_BIAS < -0.01:
             return True
-        elif self.lane_index == (
-            "b",
-            "c",
-            2,
-        ):  # Merging vehicles #and self.RIGHT_BIAS > 0.1:
+        elif (
+            self.lane_index
+            == (
+                "b",
+                "c",
+                2,
+            )
+            # and self.RIGHT_BIAS > 0.1
+        ):
+            # Merging vehicles
             return True
         else:
             return False

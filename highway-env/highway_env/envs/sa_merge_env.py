@@ -113,7 +113,7 @@ class SingleAgentMergeEnv(AbstractEnv):
         # return self.vehicle.crashed or self.vehicle.position[0] > 370 #or self.steps >= 200
         return (
             self.vehicle.crashed
-            or self.vehicle.position[0] > 500
+            or self.vehicle.position[0] > 350
             or self.vehicle.lane_index == ("c", "o", 0)
         )  # end the episode if the vehicle drives off ramp
         # return self.vehicle.crashed \

@@ -283,3 +283,23 @@ class ObservationGraphics(object):
                 for i in range(stepsize)
             ]
             pygame.draw.lines(surface, ObservationGraphics.COLORS[j], False, points, 1)
+
+        # draw just maximum range
+        r = np.repeat(
+            50 * np.ones(lidar_observation.grid[:, 0].shape),
+            2,
+        )
+        for j in range(4):
+            stepsize = int(np.size(psi) / 4)
+            points = [
+                (
+                    surface.pos2pix(
+                        lidar_observation.origin[0]
+                        + r[i + stepsize * j] * np.cos(psi[i + stepsize * j]),
+                        lidar_observation.origin[1]
+                        + r[i + stepsize * j] * np.sin(psi[i + stepsize * j]),
+                    )
+                )
+                for i in range(stepsize)
+            ]
+            pygame.draw.lines(surface, ObservationGraphics.COLORS[j], False, points, 1)

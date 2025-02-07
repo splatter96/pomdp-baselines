@@ -66,18 +66,18 @@ class Vehicle(object):
         dutycycle = config.get("dutycycle", None)
         if dutycycle is not None:
             self.dutycycle = (
-                np.random.randint(dutycycle[0], dutycycle[1]) / 100
+                np.random.normal(dutycycle, 2) / 100
             )  # [% / 100] dutycycle of the radar usage
         else:
             self.dutycycle = (
-                np.random.randint(1, 2) / 100
+                np.random.normal(5, 2) / 100
             )  # [% / 100] dutycycle of the radar usage
 
         self.dutycycle_offset = (
-            np.random.randint(0, 20) / 1000
+            np.random.normal(15, 3) / 1000
         )  # [ms] offset in milliseconds
         self.frame_time = (
-            np.random.randint(5, 20) / 1000
+            np.random.normal(8, 3) / 1000
         )  # [ms] duration of one radar frame
 
     @classmethod
@@ -339,7 +339,7 @@ class Vehicle(object):
 
     def __str__(self):
         # return "{} #{}: {}".format(self.__class__.__name__, id(self) % 1000, self.position)
-        return f"#{self.id}"
+        return f"#{self.id} {self.dutycycle} {self.dutycycle_offset} {self.frame_time}"
 
     def __repr__(self):
         return self.__str__()

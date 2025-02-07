@@ -224,6 +224,12 @@ class MDPVehicle(ControlledVehicle):
         self.speed_index = self.speed_to_index(self.target_speed)
         self.target_speed = self.index_to_speed(self.speed_index)
 
+        # for interference calculation
+        # Set the radar configuration of the TI USSR for the ego vehicle
+        self.dutycycle = 14 / 100  # [% / 100] dutycycle of the radar usage
+        self.dutycycle_offset = 0  # [ms] offset in milliseconds
+        self.frame_time = 8.3 / 1000  # [ms] duration of one radar frame
+
     def act(self, action: Union[dict, str] = None) -> None:
         """
         Perform a high-level action.
