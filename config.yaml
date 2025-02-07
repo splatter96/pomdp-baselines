@@ -15,9 +15,9 @@ env:
   collision_reward: 200
   high_speed_reward: 2
   safety_guarantee: false
-  traffic_density: 1
+  traffic_density: 3
   offramp_reward: 100
-  dutycycle: [1,2]
+  dutycycle: 20
   observation:
     type: LidarObservation
     enable_interference: true
@@ -30,7 +30,7 @@ train:
   buffer_size: 500000
   batch_size: 256 # to tune based on sampled_seq_len
   num_updates_per_iter: 16
-  sampled_seq_len: -1 # -1 is all, or positive integer
+  sampled_seq_len: 20 # -1 is all, or positive integer
   sample_weight_baseline: 0.0
 
 eval:
