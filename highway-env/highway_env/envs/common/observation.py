@@ -529,6 +529,10 @@ class LidarObservation(ObservationType):
         self.normalize = normalize
         self.angle = np.array(2 * np.pi / self.cells)
         self.grid = np.ones((self.cells, 1)) * float("inf")
+
+        self.cells_radar = 64
+        self.angle_radar = np.array(2 * np.pi / self.cells_radar)
+        self.grid_radar = np.ones((self.cells_radar, 1)) * float("inf")
         self.origin = None
 
         self.num_radars = 4
@@ -591,8 +595,8 @@ class LidarObservation(ObservationType):
             self.observer_vehicle.position,
             self.observer_vehicle.velocity,
             self.maximum_range,
-            self.cells,
-            self.angle,
+            self.cells_radar,
+            self.angle_radar,
             self.env.road.vehicles + self.env.road.objects,
             self.observer_vehicle,
         )
@@ -644,10 +648,9 @@ class LidarObservation(ObservationType):
                                     interferer_per_frame[frame_idx].append(v.id)
                     t2 += 1 / self.radar_frequency
 
-            print("interferer_per_frame")
-            for frame in interferer_per_frame:
-                print(frame)
-            print()
+            # for frame in interferer_per_frame:
+            #     print(frame)
+            # print()
 
             # duplicate the obs for each frame in our simulation step
             obs_per_frame = np.repeat(
@@ -677,6 +680,10 @@ class LidarObservation(ObservationType):
             def detection(S, I):
                 return (S / I) > self.T
 
+            # effective_interferer = 0
+            # total_interferer = 0
+            # detections_sum = 0
+            # detections_count = 0
             # new calculation
             for i, frame in enumerate(interferer_per_frame):
                 overlapping_ids_of_frame = frame
@@ -687,6 +694,15 @@ class LidarObservation(ObservationType):
 
                 # calculate which observations are affected by the interference
                 affected_obs = obs_per_frame[i, mask]
+
+                # if affected_obs.any() > 0:
+                # total_interferer += len(frame)
+                # effective_interferer += np.unique(affected_obs[:, 2]).shape[0]
+                # print(f"{num_total_interferers=}")
+                # print(f"{num_affective_interferers=}")
+                # effective_interferer_ratio += (
+                #     num_affective_interferers / num_total_interferers
+                # )
 
                 # calculate which radars are interfered with
                 affected_radars = np.unique(affected_obs[:, 3])
@@ -710,6 +726,8 @@ class LidarObservation(ObservationType):
                     )  # signal power of interferer
 
                     detections = detection(sig_power, int_power)
+                    # detections_sum += detections.sum()
+                    # detections_count += detections.shape[0]
 
                     # create a mask to select the observations for current radar
                     mask = obs_per_frame[i, :, 3] == radar
@@ -725,24 +743,52 @@ class LidarObservation(ObservationType):
                     obs_per_frame[i, mask, 0] = interfered_dist
                     obs_per_frame[i, mask, 1] = interfered_vel
 
-            print(obs_per_frame)
+            # effective_interferer /= len(interferer_per_frame)
+            # total_interferer /= len(interferer_per_frame)
+            # print(f"{effective_interferer=}")
+            # print(f"{total_interferer=}")
+            # print(obs_per_frame)
+            # print(f"Detection percentage {detections_sum/detections_count}")
 
             # only overwrite the actual observation if all frames were interfered with
-
             # distance
             obs[:, 0] = np.min(
                 obs_per_frame[:, :, 0], axis=0
             )  # at least one had actual measurments
             obs[:, 0] = np.minimum(
                 obs[:, 0], 150
-            )  # at least one had actual measurments
+            )  # clamp maximum distance to our actual measurment range of 150m
 
             # velocity
             vel = obs_per_frame[:, :, 1]
-            obs[:, 1] *= vel.any(axis=0)
+            obs[:, 1] *= vel.any(
+                axis=0
+            )  # multiply with the non zero elments to have the ones per frame that are not intfered with
+
+            # downsample the amount of cells for actual usage of agent
+            output_cells = self.cells
+            combined_cells = int(self.cells_radar / output_cells)
+            output_obs = np.zeros((output_cells, 2))
+
+            dist = obs[:, 0]
+            vel = obs[:, 1]
+            for i in range(output_cells):
+                # set distance to the minimum of the cells we combine
+                output_obs[i, 0] = dist[
+                    i * combined_cells : (i + 1) * combined_cells
+                ].min()
+
+                # set velocity to the velocity of the cell which is closest within the ones we combine
+                closest_hit = dist[
+                    i * combined_cells : (i + 1) * combined_cells
+                ].argmin()
+                output_obs[i, 1] = vel[i * combined_cells + closest_hit]
 
             # overwrite internal grid for visualization
-            self.grid = obs[:, 0:1].copy()
+            self.grid = output_obs
+            self.grid_radar = obs[:, 0:1].copy()
+
+            obs = output_obs.copy()
 
         ###
         # end interference calculations

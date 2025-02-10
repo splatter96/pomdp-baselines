@@ -74,10 +74,10 @@ class Vehicle(object):
             )  # [% / 100] dutycycle of the radar usage
 
         self.dutycycle_offset = (
-            np.random.normal(15, 3) / 1000
+            np.random.normal(15, 7) / 1000
         )  # [ms] offset in milliseconds
         self.frame_time = (
-            np.random.normal(8, 3) / 1000
+            np.random.normal(10, 3) / 1000
         )  # [ms] duration of one radar frame
 
     @classmethod
