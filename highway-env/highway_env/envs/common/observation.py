@@ -540,7 +540,7 @@ class LidarObservation(ObservationType):
             overlap_prob  # probability for resource access at the same time
         )
         self.t = 0
-        self.dt = 1 / self.env.config["simulation_frequency"]
+        self.dt = 1 / self.env.config["policy_frequency"]
         self.radar_frequency = 2000  # [Hz] frequency of radar overlap calculation
         # need to set this later as we don't have the vehicles during creation of the observation
         self.ego_frametime = -1
@@ -603,6 +603,7 @@ class LidarObservation(ObservationType):
         self.origin = self.observer_vehicle.position.copy()
         obs = self.grid.copy()
 
+        self.grid_radar = obs[:, 0:1].copy()
         ######
         # interference calculations
         #####
@@ -610,7 +611,7 @@ class LidarObservation(ObservationType):
         if self.enable_interference:
             # add radar index to observation
             index = np.arange(obs.shape[0])  # create index array for indexing
-            cells_per_radar = self.cells / self.num_radars
+            cells_per_radar = self.cells_radar / self.num_radars
             index //= int(cells_per_radar)  # integer division (floor rounding)
             obs = np.c_[obs, index]
 
@@ -649,9 +650,18 @@ class LidarObservation(ObservationType):
                     t2 += 1 / self.radar_frequency
 
             # for frame in interferer_per_frame:
-            #     print(frame)
-            # print()
+            #     # print(frame)
+            #     for veh_id in frame:
+            #         if veh_id in obs[:, 2]:
+            #             print(veh_id, end=",")
+            #     print()
 
+            # for radar_idx in range(self.num_radars):
+            #     partial_obs = obs[obs[:, 3] == radar_idx]
+            #     print(f"Visible veh radar {radar_idx} {np.unique(partial_obs[:, 2])}")
+            # #
+            # original_vels = np.count_nonzero(obs[:, 1], axis=0)
+            #
             # duplicate the obs for each frame in our simulation step
             obs_per_frame = np.repeat(
                 obs[np.newaxis, :, :], self.radar_frames_per_timestep, axis=0
@@ -680,6 +690,9 @@ class LidarObservation(ObservationType):
             def detection(S, I):
                 return (S / I) > self.T
 
+            affected_radars_per_frame = np.zeros(
+                (self.radar_frames_per_timestep, self.num_radars)
+            )
             # effective_interferer = 0
             # total_interferer = 0
             # detections_sum = 0
@@ -706,12 +719,17 @@ class LidarObservation(ObservationType):
 
                 # calculate which radars are interfered with
                 affected_radars = np.unique(affected_obs[:, 3])
+                # np.put_along_axis(
+                #     affected_radars_per_frame[i], affected_radars.astype(int), 1, axis=0
+                # )
 
                 # calculate the distance to the interferers
                 distance_per_radar = np.split(
                     obs_per_frame[i, mask, 0],
                     np.unique(affected_obs[:, 3], return_index=True)[1][1:],
                 )
+
+                # print(f"affected_radars {affected_radars}")
 
                 # calculate minimum interferer distance per radar
                 for j, radar in enumerate(affected_radars):
@@ -749,7 +767,12 @@ class LidarObservation(ObservationType):
             # print(f"{total_interferer=}")
             # print(obs_per_frame)
             # print(f"Detection percentage {detections_sum/detections_count}")
-
+            #
+            # radars_affected_for_whole_timestep = np.all(
+            #     affected_radars_per_frame, axis=0
+            # )
+            # print(f"Radars in whole timestep {radars_affected_for_whole_timestep}")
+            #
             # only overwrite the actual observation if all frames were interfered with
             # distance
             obs[:, 0] = np.min(
@@ -763,7 +786,11 @@ class LidarObservation(ObservationType):
             vel = obs_per_frame[:, :, 1]
             obs[:, 1] *= vel.any(
                 axis=0
-            )  # multiply with the non zero elments to have the ones per frame that are not intfered with
+            )  # multiply with the non zero elments to have the ones per frame that are not intefered with
+
+            # get the number of actually modified observations
+            # modified_vels = np.count_nonzero(obs[:, 1], axis=0)
+            # print(f"modified entries {original_vels-modified_vels}")
 
             # downsample the amount of cells for actual usage of agent
             output_cells = self.cells
@@ -786,7 +813,6 @@ class LidarObservation(ObservationType):
 
             # overwrite internal grid for visualization
             self.grid = output_obs
-            self.grid_radar = obs[:, 0:1].copy()
 
             obs = output_obs.copy()
 

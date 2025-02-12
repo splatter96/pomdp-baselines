@@ -67,6 +67,7 @@ class Vehicle(object):
         if dutycycle is not None:
             self.dutycycle = (
                 np.random.normal(dutycycle, 2) / 100
+                # 14 / 100
             )  # [% / 100] dutycycle of the radar usage
         else:
             self.dutycycle = (
@@ -74,10 +75,10 @@ class Vehicle(object):
             )  # [% / 100] dutycycle of the radar usage
 
         self.dutycycle_offset = (
-            np.random.normal(15, 7) / 1000
+            np.random.normal(0, 14) / 1000
         )  # [ms] offset in milliseconds
         self.frame_time = (
-            np.random.normal(10, 3) / 1000
+            np.maximum(np.random.normal(10, 3), 5) / 1000  # set a lower bound of atleast 5ms
         )  # [ms] duration of one radar frame
 
     @classmethod
