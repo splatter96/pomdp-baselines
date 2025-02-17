@@ -719,9 +719,9 @@ class LidarObservation(ObservationType):
 
                 # calculate which radars are interfered with
                 affected_radars = np.unique(affected_obs[:, 3])
-                # np.put_along_axis(
-                #     affected_radars_per_frame[i], affected_radars.astype(int), 1, axis=0
-                # )
+                np.put_along_axis(
+                    affected_radars_per_frame[i], affected_radars.astype(int), 1, axis=0
+                )
 
                 # calculate the distance to the interferers
                 distance_per_radar = np.split(
@@ -768,10 +768,12 @@ class LidarObservation(ObservationType):
             # print(obs_per_frame)
             # print(f"Detection percentage {detections_sum/detections_count}")
             #
-            # radars_affected_for_whole_timestep = np.all(
-            #     affected_radars_per_frame, axis=0
-            # )
+            radars_affected_for_whole_timestep = np.all(
+                affected_radars_per_frame, axis=0
+            )
             # print(f"Radars in whole timestep {radars_affected_for_whole_timestep}")
+            num_affected_radars = radars_affected_for_whole_timestep.sum()
+            # print(f"num affected_radars {num_affected_radars}")
             #
             # only overwrite the actual observation if all frames were interfered with
             # distance
@@ -863,7 +865,7 @@ class LidarObservation(ObservationType):
 
         # obs = {"lidar": obs[:, :2], "ego": ego_pos}
 
-        return obs
+        return obs, num_affected_radars
 
     def trace(self, origin: np.ndarray, origin_velocity: np.ndarray) -> np.ndarray:
         self.origin = origin.copy()

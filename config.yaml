@@ -7,7 +7,10 @@ env:
   num_eval_tasks: 20 # num of eval episodes
 
   duration: 15
+  # policy_frequency: 120
+  # simulation_frequency: 120
   policy_frequency: 5
+  simulation_frequency: 15
   merging_speed_reward: -0.5
   right_lane_reward: 0.1
   lane_change_reward: -0.05
@@ -17,10 +20,11 @@ env:
   safety_guarantee: false
   traffic_density: 3
   offramp_reward: 100
-  dutycycle: 20
+  dutycycle: 14
   observation:
     type: LidarObservation
     enable_interference: true
+    #cells: 64
 
 train:
   num_iters: 5000 # number meta-training iterates

@@ -200,7 +200,7 @@ class AbstractEnv(gym.Env):
         # set the vehicle id for visualizing
         for i, v in enumerate(self.road.vehicles):
             v.id = i
-        obs = self.observation_type.observe()
+        obs, num_affected_radars = self.observation_type.observe()
         # get action masks
         if self.config["action_masking"]:
             available_actions = [[0] * self.n_a] * len(self.controlled_vehicles)
@@ -753,7 +753,7 @@ class AbstractEnv(gym.Env):
         # action is a tuple, e.g., (2, 3, 0, 1)
         self._simulate(self.new_action)
 
-        obs = self.observation_type.observe()
+        obs, num_affected_radars = self.observation_type.observe()
         reward = self._reward(action)
         terminal = self._is_terminal()
 
@@ -803,6 +803,7 @@ class AbstractEnv(gym.Env):
             "vehicle_speed": self.vehicle_speed,
             "vehicle_position": self.vehicle_pos,
             "merged": merged,
+            "num_affected_radars": num_affected_radars,
         }
 
         # if terminal:

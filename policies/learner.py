@@ -31,6 +31,8 @@ from torchkit import pytorch_utils as ptu
 from utils import evaluation as utl_eval
 from utils import logger
 
+from copy import deepcopy
+
 
 class Learner:
     def __init__(self, env_args, train_args, eval_args, policy_args, seed, **kwargs):
@@ -479,6 +481,7 @@ class Learner:
             batch = self.policy_storage.random_batch(batch_size)
         else:  # rnn: all items are (sampled_seq_len, B, dim)
             batch = self.policy_storage.random_episodes(batch_size)
+
         return ptu.np_to_pytorch_batch(batch)
 
     def update(self, num_updates):
@@ -515,6 +518,8 @@ class Learner:
         num_steps_per_episode = self.eval_env._max_episode_steps
         observations = None
 
+        total_affected_radars = 0
+
         if log:
             tasks = tqdm(tasks)
 
@@ -524,14 +529,37 @@ class Learner:
             obs = ptu.from_numpy(self.eval_env.reset()[0])  # reset
             obs = obs.flatten()
             obs = obs.reshape(1, obs.shape[-1])
+            initial_veh = deepcopy(self.eval_env.road.vehicles)
 
+            # with open("initial_veh979.pkl", "rb") as f:
+            #     self.eval_env.road.vehicles = pickle.load(f)
+            #     self.eval_env.set_vehicle(self.eval_env.road.vehicles[0])
+            # with open("random_state13.pkl", "rb") as f:
+            #     np.random.set_state(pickle.load(f))
+            # Need to reobserv when setting the initial state, as
+            # the old observation was from the old initial state
+            obs = self.eval_env.observation_type.t = 0
+            obs = self.eval_env.observation_type.observe()[0]
+            obs = ptu.from_numpy(obs)
+            obs = obs.flatten()
+            obs = obs.reshape(1, obs.shape[-1])
+
+            # for v in self.eval_env.road.vehicles:
+            #     print(v.dutycycle, end=",\n")
+            # print()
+            # for v in self.eval_env.road.vehicles:
+            #     print(v.dutycycle_offset, end=",\n")
+            # print()
+            # for v in self.eval_env.road.vehicles:
+            #     print(v.frame_time, end=",\n")
+            #
             if self.agent_arch == AGENT_ARCHS.Memory:
                 # assume initial reward = 0.0
                 action, reward, internal_state = self.agent.get_initial_info()
 
             for episode_idx in range(num_episodes):
                 running_reward = 0.0
-                for _ in range(num_steps_per_episode):
+                for i in range(num_steps_per_episode):
                     if self.agent_arch == AGENT_ARCHS.Memory:
                         (action, _, _, _), internal_state = self.agent.act(
                             prev_internal_state=internal_state,
@@ -566,11 +594,18 @@ class Learner:
                     #     # output_names=["action"],
                     # )
                     #
-                    # observe reward and next obs
+                    # # observe reward and next obs
                     next_obs, reward, done, info = utl.env_step(
                         self.eval_env, action.squeeze(dim=0), render
                     )
 
+                    total_affected_radars += info["num_affected_radars"]
+
+                    # if i == 0:
+                    #     with open(f"vehicles_{task_idx}_{1}.txt", "w") as f:
+                    #         for v in self.eval_env.road.vehicles:
+                    #             f.write(f"{v.position}\n")
+                    #
                     # add raw reward
                     running_reward += reward.item()
                     # clip reward if necessary for policy inputs
@@ -585,23 +620,31 @@ class Learner:
 
                     if "crashed" in info and info["crashed"] == True:
                         crashes += 1
+                        # save initial vehicles
+                        # with open(f"initial_veh{task_idx}.pkl", "wb") as f:
+                        #     pickle.dump(initial_veh, f)
+                        # with open(f"random_state{task_idx}.pkl", "wb") as f:
+                        #     pickle.dump(np.random.get_state(), f)
+
                     elif "merged" in info and info["merged"] == True and done_rollout:
                         merges += 1
 
                     if done_rollout:
                         # for all env types, same
-                        # if log:
-                        #     print(
-                        #         f"Mergerate: {merges/(task_idx+1)} Crashrate: {crashes/(task_idx+1)}"
-                        #     )
                         if log:
                             tasks.set_description(
                                 f"Crashrate {crashes/(task_idx+1)} Mergerate {merges/(task_idx+1)}"
                             )
+
                         break
 
                 returns_per_episode[task_idx, episode_idx] = running_reward
             total_steps[task_idx] = step
+            print(total_steps.sum())
+            print(total_affected_radars)
+            print(
+                f"average affected radars: {total_affected_radars / total_steps.sum()}"
+            )
         return returns_per_episode, success_rate, observations, total_steps
 
     def log_train_stats(self, train_stats):

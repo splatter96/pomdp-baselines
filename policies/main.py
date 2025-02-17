@@ -8,6 +8,7 @@ import numpy as np
 import torch
 
 from ruamel.yaml import YAML
+
 # from absl import flags
 from utils import system, logger
 from pathlib import Path
@@ -135,7 +136,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
     os.makedirs(exp_id, exist_ok=True)
     log_folder = os.path.join(exp_id, system.now_str())
-    logger_formats = ["stdout", "log", "csv", "wandb"]
+    logger_formats = ["stdout", "log", "csv"]  # , "wandb"]
     if cfg.eval.log_tensorboard:
         logger_formats.append("tensorboard")
     logger.configure(v, dir=log_folder, format_strs=logger_formats, precision=4)
@@ -143,36 +144,36 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
     os.system(f"cp -r {to_absolute_path('policies')}/ {log_folder}")
 
-    if "merge" in cfg.env.env_name:
-        os.system(f"cp -r {to_absolute_path('highway-env')}/ {log_folder}")
-
-        print(f"Working directory : {os.getcwd()}")
-        artifact = wandb.run.log_code(
-            f"{to_absolute_path('highway-env')}",
-            name="Simulation_Code",
-            include_fn=lambda path: path.endswith(".py")
-            or path.endswith(".pyx")
-            or path.endswith("c_utils.c"),
-        )
-        artifact.wait()
-        # wandb.run.log_artifact(artifact)
-        wandb.run.use_artifact(artifact, type="code")
-
-        # artifact = wandb.run.log_code(
-        #     f"{to_absolute_path('policies')}",
-        #     name="Training_Code",
-        # )
-        artifact = wandb.Artifact("NewTraining_Code", type="code")
-        paths = glob.glob("policies/**/*.py")
-        for path in paths:
-            print(path)
-            artifact.add_file(path, name=path)
-
-        # artifact.wait()
-        # wandb.run.log_artifact(artifact)
-        wandb.run.use_artifact(artifact, type="code")
-        artifact.wait()
-
+    # if "merge" in cfg.env.env_name:
+    #     os.system(f"cp -r {to_absolute_path('highway-env')}/ {log_folder}")
+    #
+    #     print(f"Working directory : {os.getcwd()}")
+    #     artifact = wandb.run.log_code(
+    #         f"{to_absolute_path('highway-env')}",
+    #         name="Simulation_Code",
+    #         include_fn=lambda path: path.endswith(".py")
+    #         or path.endswith(".pyx")
+    #         or path.endswith("c_utils.c"),
+    #     )
+    #     artifact.wait()
+    #     # wandb.run.log_artifact(artifact)
+    #     wandb.run.use_artifact(artifact, type="code")
+    #
+    #     # artifact = wandb.run.log_code(
+    #     #     f"{to_absolute_path('policies')}",
+    #     #     name="Training_Code",
+    #     # )
+    #     artifact = wandb.Artifact("NewTraining_Code", type="code")
+    #     paths = glob.glob("policies/**/*.py")
+    #     for path in paths:
+    #         print(path)
+    #         artifact.add_file(path, name=path)
+    #
+    #     # artifact.wait()
+    #     # wandb.run.log_artifact(artifact)
+    #     wandb.run.use_artifact(artifact, type="code")
+    #     artifact.wait()
+    #
     yaml.dump(v, Path(f"{log_folder}/variant_{pid}.yml"))
     # key_flags = FLAGS.get_key_flags_for_module(sys.argv[0])
     # logger.log("\n".join(f.serialize() for f in key_flags) + "\n")

@@ -52,13 +52,12 @@ if FLAGS.entropy_alpha is not None:
 if FLAGS.target_entropy is not None:
     v["policy"][algo]["target_entropy"] = FLAGS.target_entropy
 
-if FLAGS.seed is not None:
-    v["seed"] = FLAGS.seed
 if FLAGS.cuda is not None:
     v["cuda"] = FLAGS.cuda
 
-# system: device, threads, seed, pid
-seed = v["seed"]
+# USE SAME SEED FOR ALL EVALUATION RUNS
+seed = 21
+# seed = v["seed"]
 system.reproduce(seed)
 
 torch.set_num_threads(1)

@@ -10,7 +10,8 @@ import gym
 import numpy as np
 from utils import helpers as utl
 from torchkit import pytorch_utils as ptu
-#from sklearn.manifold import TSNE
+
+# from sklearn.manifold import TSNE
 import seaborn as sns
 import pandas as pd
 import pylab as pl
@@ -208,7 +209,6 @@ def get_test_rollout(args, env, policy, encoder=None):
     obs_normalised = obs_normalised.reshape((1, -1)).to(ptu.device)
 
     for episode_idx in range(num_episodes):
-
         curr_rollout_rew = []
 
         if encoder is not None:
@@ -229,7 +229,6 @@ def get_test_rollout(args, env, policy, encoder=None):
             episode_latent_logvars[episode_idx].append(curr_latent_logvar[0].clone())
 
         for step_idx in range(1, env._max_episode_steps + 1):
-
             episode_prev_obs[episode_idx].append(obs_raw.clone())
 
             _, action, _ = utl.select_action(
@@ -432,7 +431,6 @@ def vis_rew_pred(args, rew_pred_arr, goal, **kwargs):
 def plot_discretized_belief_halfcircle(
     belief_rewards, center_points, env, observations
 ):
-
     fig = plt.figure()
     env.plot_behavior(observations, plot_env=True, color=cols_deep[3], linewidth=5)
     res = center_points[1, 0] - center_points[0, 0]
@@ -557,8 +555,7 @@ def visualize_bahavior(observations, env):
                     (
                         observations[:1, :],
                         observations[
-                            episode * episode_len
-                            + 1 : episode * episode_len
+                            episode * episode_len + 1 : episode * episode_len
                             + 1
                             + timestep
                         ],
