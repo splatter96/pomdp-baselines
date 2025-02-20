@@ -257,32 +257,32 @@ class ObservationGraphics(object):
 
     @classmethod
     def display_grid(cls, lidar_observation, surface):
-        # second overlay for modifications
-        psi = np.repeat(
-            np.arange(
-                -lidar_observation.angle_radar / 2,
-                2 * np.pi - lidar_observation.angle_radar / 2,
-                2 * np.pi / lidar_observation.grid_radar.shape[0],
-            ),
-            2,
-        )
-        psi = np.hstack((psi[1:], [psi[0]]))
-        r = np.repeat(
-            np.minimum(
-                lidar_observation.grid_radar[:, 0], lidar_observation.maximum_range
-            ),
-            2,
-        )
-        points = [
-            (
-                surface.pos2pix(
-                    lidar_observation.origin[0] + r[i] * np.cos(psi[i]),
-                    lidar_observation.origin[1] + r[i] * np.sin(psi[i]),
-                )
-            )
-            for i in range(np.size(psi))
-        ]
-        pygame.draw.lines(surface, (251, 198, 207), False, points, 1)
+        # # second overlay for modifications
+        # psi = np.repeat(
+        #     np.arange(
+        #         -lidar_observation.angle_radar / 2,
+        #         2 * np.pi - lidar_observation.angle_radar / 2,
+        #         2 * np.pi / lidar_observation.grid_radar.shape[0],
+        #     ),
+        #     2,
+        # )
+        # psi = np.hstack((psi[1:], [psi[0]]))
+        # r = np.repeat(
+        #     np.minimum(
+        #         lidar_observation.grid_radar[:, 0], lidar_observation.maximum_range
+        #     ),
+        #     2,
+        # )
+        # points = [
+        #     (
+        #         surface.pos2pix(
+        #             lidar_observation.origin[0] + r[i] * np.cos(psi[i]),
+        #             lidar_observation.origin[1] + r[i] * np.sin(psi[i]),
+        #         )
+        #     )
+        #     for i in range(np.size(psi))
+        # ]
+        # pygame.draw.lines(surface, (251, 198, 207), False, points, 1)
 
         psi = np.repeat(
             np.arange(

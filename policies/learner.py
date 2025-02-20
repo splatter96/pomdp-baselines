@@ -68,6 +68,7 @@ class Learner:
             "atari",
         ]
         self.env_type = env_type
+        self.env_args = kwargs
 
         if self.env_type in [
             "pomdp",
@@ -520,6 +521,10 @@ class Learner:
 
         total_affected_radars = 0
 
+        total_affected_radars_data = []
+
+        # print(self.env_args)
+
         if log:
             tasks = tqdm(tasks)
 
@@ -600,6 +605,9 @@ class Learner:
                     )
 
                     total_affected_radars += info["num_affected_radars"]
+                    total_affected_radars_data.append(
+                        self.eval_env.unwrapped.observation_type.affected_radars_data
+                    )
 
                     # if i == 0:
                     #     with open(f"vehicles_{task_idx}_{1}.txt", "w") as f:
@@ -640,6 +648,14 @@ class Learner:
 
                 returns_per_episode[task_idx, episode_idx] = running_reward
             total_steps[task_idx] = step
+
+            # self.eval_env.unwrapped.observation_type.dump()
+            with open(
+                f"radars_{self.env_args['dutycycle']}_{self.eval_env.observation_type.radar_frequency}_auto.npy",
+                "wb",
+            ) as f:
+                np.save(f, np.array(total_affected_radars_data))
+
             print(total_steps.sum())
             print(total_affected_radars)
             print(

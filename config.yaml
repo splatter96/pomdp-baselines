@@ -1,3 +1,6 @@
+defaults:
+  - override hydra/launcher: joblib
+
 seed: 73
 cuda: 0 # use_gpu
 env:
@@ -20,7 +23,7 @@ env:
   safety_guarantee: false
   traffic_density: 3
   offramp_reward: 100
-  dutycycle: 14
+  dutycycle: 40
   observation:
     type: LidarObservation
     enable_interference: true
@@ -65,3 +68,6 @@ policy:
     target_entropy: 0.7 # the ratio: target_entropy = ratio * log(|A|)
     alpha_lr: 0.0005
 
+chkpt_path: 02-12:15-22:55.65/save/agent_1000_perf-50.783.pt
+render: true
+num_runs: 100

@@ -541,7 +541,7 @@ class LidarObservation(ObservationType):
         )
         self.t = 0
         self.dt = 1 / self.env.config["policy_frequency"]
-        self.radar_frequency = 2000  # [Hz] frequency of radar overlap calculation
+        self.radar_frequency = 6000  # [Hz] frequency of radar overlap calculation
         # need to set this later as we don't have the vehicles during creation of the observation
         self.ego_frametime = -1
 
@@ -573,6 +573,8 @@ class LidarObservation(ObservationType):
         ]
 
         self.enable_interference = enable_interference
+
+        self.affected_radars_data = []
 
     def space(self) -> spaces.Space:
         high = 1 if self.normalize else self.maximum_range
@@ -648,6 +650,11 @@ class LidarObservation(ObservationType):
                                 if v.id not in interferer_per_frame[frame_idx]:
                                     interferer_per_frame[frame_idx].append(v.id)
                     t2 += 1 / self.radar_frequency
+
+            # print(f"t2 after loops {t2}")
+            # print(f"{self.t=}")
+            # print(f"{self.t+self.dt=}")
+            # exit(0)
 
             # for frame in interferer_per_frame:
             #     # print(frame)
@@ -771,25 +778,27 @@ class LidarObservation(ObservationType):
             radars_affected_for_whole_timestep = np.all(
                 affected_radars_per_frame, axis=0
             )
-            # print(f"Radars in whole timestep {radars_affected_for_whole_timestep}")
+
+            self.affected_radars_data = radars_affected_for_whole_timestep
+
             num_affected_radars = radars_affected_for_whole_timestep.sum()
-            # print(f"num affected_radars {num_affected_radars}")
-            #
+
+            # DONT OVERWRITE anything for fair comparison for now
             # only overwrite the actual observation if all frames were interfered with
             # distance
-            obs[:, 0] = np.min(
-                obs_per_frame[:, :, 0], axis=0
-            )  # at least one had actual measurments
-            obs[:, 0] = np.minimum(
-                obs[:, 0], 150
-            )  # clamp maximum distance to our actual measurment range of 150m
-
-            # velocity
-            vel = obs_per_frame[:, :, 1]
-            obs[:, 1] *= vel.any(
-                axis=0
-            )  # multiply with the non zero elments to have the ones per frame that are not intefered with
-
+            # obs[:, 0] = np.min(
+            #     obs_per_frame[:, :, 0], axis=0
+            # )  # at least one had actual measurments
+            # obs[:, 0] = np.minimum(
+            #     obs[:, 0], 150
+            # )  # clamp maximum distance to our actual measurment range of 150m
+            #
+            # # velocity
+            # vel = obs_per_frame[:, :, 1]
+            # obs[:, 1] *= vel.any(
+            #     axis=0
+            # )  # multiply with the non zero elments to have the ones per frame that are not intefered with
+            #
             # get the number of actually modified observations
             # modified_vels = np.count_nonzero(obs[:, 1], axis=0)
             # print(f"modified entries {original_vels-modified_vels}")
