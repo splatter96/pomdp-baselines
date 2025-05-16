@@ -1,6 +1,7 @@
 # -*- coding: future_fstrings -*-
 import os, sys
 import time
+import pickle
 
 import math
 import numpy as np
@@ -507,9 +508,104 @@ class Learner:
         return rl_losses_agg
 
     @torch.no_grad()
+    def evaluate_parallel(self, tasks, deterministic=True, render=False, log=False):
+        from joblib import Parallel, delayed, parallel_config
+
+        def eval(task_idx):
+            num_episodes = self.max_rollouts_per_task  # k
+            crashes = 0
+            merges = 0
+            speed = 0
+            road_speed = 0
+            step = 0
+
+            num_steps_per_episode = self.eval_env._max_episode_steps
+
+            obs = ptu.from_numpy(self.eval_env.reset()[0])  # reset
+            obs = obs.flatten()
+            obs = obs.reshape(1, obs.shape[-1])
+
+            obs = self.eval_env.observation_type.t = 0
+            obs = self.eval_env.observation_type.observe()
+            obs = ptu.from_numpy(obs)
+            obs = obs.flatten()
+            obs = obs.reshape(1, obs.shape[-1])
+
+            if self.agent_arch == AGENT_ARCHS.Memory:
+                # assume initial reward = 0.0
+                action, reward, internal_state = self.agent.get_initial_info()
+
+            for episode_idx in range(num_episodes):
+                for i in range(num_steps_per_episode):
+                    if self.agent_arch == AGENT_ARCHS.Memory:
+                        (action, _, _, _), internal_state = self.agent.act(
+                            prev_internal_state=internal_state,
+                            prev_action=action,
+                            reward=reward,
+                            obs=obs,
+                            deterministic=deterministic,
+                        )
+                    else:
+                        action, _, _, _ = self.agent.act(
+                            obs, deterministic=deterministic
+                        )
+
+                    # observe reward and next obs
+                    next_obs, reward, done, info = utl.env_step(
+                        self.eval_env, action.squeeze(dim=0), render
+                    )
+
+                    speed += info["average_speed"]
+                    road_speed += info["average_road_speed"]
+
+                    step += 1
+                    done_rollout = False if ptu.get_numpy(done[0][0]) == 0.0 else True
+
+                    # set: obs <- next_obs
+                    obs = next_obs.clone()
+
+                    if "crashed" in info and info["crashed"] == True:
+                        crashes += 1
+                    elif "merged" in info and info["merged"] == True and done_rollout:
+                        merges += 1
+
+                    if done_rollout:
+                        break
+
+            return crashes, merges, speed, road_speed, step
+
+
+        start = time.time()
+        with parallel_config(backend="loky", inner_max_num_threads=1):
+            res = list(
+                    tqdm(
+                        Parallel(return_as="generator", n_jobs=8)(delayed(eval)(i) for i in range(0, len(tasks))),
+                        total=len(tasks)
+                        )
+                )
+
+            total_steps = 0
+            total_crashes = 0
+            total_merges = 0
+            total_speed = 0
+            total_road_speed = 0
+            for r in res:
+                total_crashes += r[0]
+                total_merges += r[1]
+                total_speed += r[2]
+                total_road_speed += r[3]
+                total_steps += r[4]
+
+            print(f"Crahrate: {total_crashes/len(tasks)}")
+            print(f"Mergerate: {total_merges/len(tasks)}")
+            print(f"Ego speed: {total_speed/total_steps}")
+            print(f"Road speed: {total_road_speed/total_steps}")
+            print(f"Took {time.time()-start}")
+
+
+    @torch.no_grad()
     def evaluate(self, tasks, deterministic=True, render=False, log=False):
         num_episodes = self.max_rollouts_per_task  # k
-        # max_trajectory_len = k*H
         returns_per_episode = np.zeros((len(tasks), num_episodes))
         success_rate = np.zeros(len(tasks))
         total_steps = np.zeros(len(tasks))
@@ -519,15 +615,16 @@ class Learner:
         num_steps_per_episode = self.eval_env._max_episode_steps
         observations = None
 
-        total_affected_radars = 0
+        speed = 0
+        road_speed = 0
 
         total_affected_radars_data = []
-
-        # print(self.env_args)
+        ego_positions = []
 
         if log:
             tasks = tqdm(tasks)
 
+        start = time.time()
         for task_idx, task in enumerate(tasks):
             step = 0
 
@@ -536,28 +633,19 @@ class Learner:
             obs = obs.reshape(1, obs.shape[-1])
             initial_veh = deepcopy(self.eval_env.road.vehicles)
 
-            # with open("initial_veh979.pkl", "rb") as f:
+            affected_radars_episode = []
+
+            # with open("initial_veh826.pkl", "rb") as f:
             #     self.eval_env.road.vehicles = pickle.load(f)
             #     self.eval_env.set_vehicle(self.eval_env.road.vehicles[0])
-            # with open("random_state13.pkl", "rb") as f:
-            #     np.random.set_state(pickle.load(f))
             # Need to reobserv when setting the initial state, as
             # the old observation was from the old initial state
             obs = self.eval_env.observation_type.t = 0
-            obs = self.eval_env.observation_type.observe()[0]
+            obs = self.eval_env.observation_type.observe()
             obs = ptu.from_numpy(obs)
             obs = obs.flatten()
             obs = obs.reshape(1, obs.shape[-1])
 
-            # for v in self.eval_env.road.vehicles:
-            #     print(v.dutycycle, end=",\n")
-            # print()
-            # for v in self.eval_env.road.vehicles:
-            #     print(v.dutycycle_offset, end=",\n")
-            # print()
-            # for v in self.eval_env.road.vehicles:
-            #     print(v.frame_time, end=",\n")
-            #
             if self.agent_arch == AGENT_ARCHS.Memory:
                 # assume initial reward = 0.0
                 action, reward, internal_state = self.agent.get_initial_info()
@@ -578,42 +666,22 @@ class Learner:
                             obs, deterministic=deterministic
                         )
 
-                    # torch.onnx.export(
-                    #     self.agent.actor,
-                    #     (action.unsqueeze(0), reward.unsqueeze(0), obs.unsqueeze(0)),
-                    #     "agent.onnx",
-                    #     input_names=["action, reward, obs"],
-                    #     output_names=["action"],
-                    # )
-                    # def forward(self, prev_actions, rewards, observs, current_actions):
-                    # torch.onnx.export(
-                    #     self.agent.critic,
-                    #     (
-                    #         action.unsqueeze(0),
-                    #         reward.unsqueeze(0),
-                    #         obs.unsqueeze(0),
-                    #         action.unsqueeze(0),
-                    #     ),
-                    #     "critic.onnx",
-                    #     input_names=["prev_action, reward, obs, current_actions"],
-                    #     # output_names=["action"],
-                    # )
-                    #
-                    # # observe reward and next obs
+                    # observe reward and next obs
                     next_obs, reward, done, info = utl.env_step(
                         self.eval_env, action.squeeze(dim=0), render
                     )
 
-                    total_affected_radars += info["num_affected_radars"]
-                    total_affected_radars_data.append(
-                        self.eval_env.unwrapped.observation_type.affected_radars_data
-                    )
+                    speed += info["average_speed"]
+                    road_speed += info["average_road_speed"]
 
-                    # if i == 0:
-                    #     with open(f"vehicles_{task_idx}_{1}.txt", "w") as f:
-                    #         for v in self.eval_env.road.vehicles:
-                    #             f.write(f"{v.position}\n")
-                    #
+                    # total_affected_radars_data.append(
+                    #     self.eval_env.unwrapped.observation_type.affected_radars_data
+                    # )
+                    # affected_radars_episode.append(
+                    #     self.eval_env.unwrapped.observation_type.affected_radars_data
+                    # )
+                    # ego_positions.append(self.eval_env.unwrapped.controlled_vehicles[0].position.copy())
+
                     # add raw reward
                     running_reward += reward.item()
                     # clip reward if necessary for policy inputs
@@ -631,6 +699,9 @@ class Learner:
                         # save initial vehicles
                         # with open(f"initial_veh{task_idx}.pkl", "wb") as f:
                         #     pickle.dump(initial_veh, f)
+                        # with open(f"affected_radars_episode_new{task_idx}.npy", "wb") as f:
+                        #     np.save(f, affected_radars_episode)
+
                         # with open(f"random_state{task_idx}.pkl", "wb") as f:
                         #     pickle.dump(np.random.get_state(), f)
 
@@ -638,7 +709,6 @@ class Learner:
                         merges += 1
 
                     if done_rollout:
-                        # for all env types, same
                         if log:
                             tasks.set_description(
                                 f"Crashrate {crashes/(task_idx+1)} Mergerate {merges/(task_idx+1)}"
@@ -649,18 +719,17 @@ class Learner:
                 returns_per_episode[task_idx, episode_idx] = running_reward
             total_steps[task_idx] = step
 
-            # self.eval_env.unwrapped.observation_type.dump()
-            with open(
-                f"radars_{self.env_args['dutycycle']}_{self.eval_env.observation_type.radar_frequency}_auto.npy",
-                "wb",
-            ) as f:
-                np.save(f, np.array(total_affected_radars_data))
+            # with open(
+            #     f"radars_{self.env_args['dutycycle']}_{self.eval_env.observation_type.radar_frequency}_any_new_auto_60_frametime_new.npy",
+            #     "wb",
+            # ) as f:
+            #     np.save(f, np.array(total_affected_radars_data))
 
-            print(total_steps.sum())
-            print(total_affected_radars)
-            print(
-                f"average affected radars: {total_affected_radars / total_steps.sum()}"
-            )
+        # with open(f"ego_positions.npy", "wb") as f:
+        #     np.save(f, ego_positions)
+        print(f"Ego speed: {speed/total_steps.sum()}")
+        print(f"Road speed: {road_speed/total_steps.sum()}")
+        print(f"Took {time.time() - start}")
         return returns_per_episode, success_rate, observations, total_steps
 
     def log_train_stats(self, train_stats):
@@ -751,4 +820,5 @@ class Learner:
     def enjoy(self, chkpt_path, render, num_runs):
         self.load_model(chkpt_path)
 
-        self.evaluate(num_runs * [None], deterministic=True, render=render, log=True)
+        # self.evaluate(num_runs * [None], deterministic=True, render=render, log=True)
+        self.evaluate_parallel(num_runs * [None], deterministic=True, render=render, log=True)
