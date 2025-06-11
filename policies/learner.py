@@ -2,6 +2,7 @@
 import os, sys
 import time
 import pickle
+from utils import system, logger
 
 import math
 import numpy as np
@@ -82,8 +83,7 @@ class Learner:
             import highway_env
 
             assert num_eval_tasks > 0
-            print(f"initializing {env_name}")
-            self.train_env = gym.make(env_name)
+            self.train_env = gym.make(env_name, config=kwargs)
             if "merge" in env_name:
                 self.train_env.config.update(kwargs)
             self.train_env.reset(seed=self.seed)
@@ -520,6 +520,7 @@ class Learner:
             step = 0
 
             num_steps_per_episode = self.eval_env._max_episode_steps
+            initial_veh = deepcopy(self.eval_env.road.vehicles)
 
             obs = ptu.from_numpy(self.eval_env.reset()[0])  # reset
             obs = obs.flatten()
@@ -566,6 +567,8 @@ class Learner:
 
                     if "crashed" in info and info["crashed"] == True:
                         crashes += 1
+                        with open(f"initial_veh{task_idx}.pkl", "wb") as f:
+                            pickle.dump(initial_veh, f)
                     elif "merged" in info and info["merged"] == True and done_rollout:
                         merges += 1
 
@@ -574,15 +577,16 @@ class Learner:
 
             return crashes, merges, speed, road_speed, step
 
-
         start = time.time()
         with parallel_config(backend="loky", inner_max_num_threads=1):
             res = list(
-                    tqdm(
-                        Parallel(return_as="generator", n_jobs=8)(delayed(eval)(i) for i in range(0, len(tasks))),
-                        total=len(tasks)
-                        )
+                tqdm(
+                    Parallel(return_as="generator", n_jobs=8)(
+                        delayed(eval)(i) for i in range(0, len(tasks))
+                    ),
+                    total=len(tasks),
                 )
+            )
 
             total_steps = 0
             total_crashes = 0
@@ -596,12 +600,16 @@ class Learner:
                 total_road_speed += r[3]
                 total_steps += r[4]
 
+            print(f"Total merges {total_merges}")
+            print(f"Total crashes {total_crashes}")
+            print(f"Total steps {total_steps}")
+            print(f"Total episodes {len(res)}")
+
             print(f"Crahrate: {total_crashes/len(tasks)}")
             print(f"Mergerate: {total_merges/len(tasks)}")
             print(f"Ego speed: {total_speed/total_steps}")
             print(f"Road speed: {total_road_speed/total_steps}")
             print(f"Took {time.time()-start}")
-
 
     @torch.no_grad()
     def evaluate(self, tasks, deterministic=True, render=False, log=False):
@@ -618,6 +626,8 @@ class Learner:
         speed = 0
         road_speed = 0
 
+        total_reward = 0
+
         total_affected_radars_data = []
         ego_positions = []
 
@@ -627,6 +637,7 @@ class Learner:
         start = time.time()
         for task_idx, task in enumerate(tasks):
             step = 0
+            episode_reward = 0
 
             obs = ptu.from_numpy(self.eval_env.reset()[0])  # reset
             obs = obs.flatten()
@@ -635,7 +646,7 @@ class Learner:
 
             affected_radars_episode = []
 
-            # with open("initial_veh826.pkl", "rb") as f:
+            # with open("initial_veh191.pkl", "rb") as f:
             #     self.eval_env.road.vehicles = pickle.load(f)
             #     self.eval_env.set_vehicle(self.eval_env.road.vehicles[0])
             # Need to reobserv when setting the initial state, as
@@ -670,6 +681,8 @@ class Learner:
                     next_obs, reward, done, info = utl.env_step(
                         self.eval_env, action.squeeze(dim=0), render
                     )
+
+                    episode_reward += reward
 
                     speed += info["average_speed"]
                     road_speed += info["average_road_speed"]
@@ -713,6 +726,8 @@ class Learner:
                             tasks.set_description(
                                 f"Crashrate {crashes/(task_idx+1)} Mergerate {merges/(task_idx+1)}"
                             )
+                            # print(f"Reward {episode_reward}")
+                            total_reward += episode_reward
 
                         break
 
@@ -727,8 +742,14 @@ class Learner:
 
         # with open(f"ego_positions.npy", "wb") as f:
         #     np.save(f, ego_positions)
+        print(f"Total merges: {merges}")
+        print(f"Total crashes: {crashes}")
+        print(f"Total episodes: {task_idx}")
+
         print(f"Ego speed: {speed/total_steps.sum()}")
         print(f"Road speed: {road_speed/total_steps.sum()}")
+        print(f"Average Reward: {total_reward/task_idx}")
+
         print(f"Took {time.time() - start}")
         return returns_per_episode, success_rate, observations, total_steps
 
@@ -820,5 +841,5 @@ class Learner:
     def enjoy(self, chkpt_path, render, num_runs):
         self.load_model(chkpt_path)
 
-        # self.evaluate(num_runs * [None], deterministic=True, render=render, log=True)
-        self.evaluate_parallel(num_runs * [None], deterministic=True, render=render, log=True)
+        self.evaluate(num_runs * [None], deterministic=True, render=render, log=True)
+        # self.evaluate_parallel(num_runs * [None], deterministic=True, render=render, log=True)

@@ -119,15 +119,14 @@ class AbstractEnv(gym.Env):
         return {
             "observation": {
                 # "type": "Kinematics"
-                "type": "LidarObservation",
-                "enable_interference": True,
+                "type": "LidarObservation"
             },
             "action": {"type": "DiscreteMetaAction"},
             "simulation_frequency": 15,  # [Hz]
             "policy_frequency": 1,  # [Hz]
             "other_vehicles_type": "highway_env.vehicle.behavior.IDMVehicle",
-            "screen_width": 2000,  # [px]
-            "screen_height": 600,  # [px]
+            "screen_width": 1200,  # [px]
+            "screen_height": 500,  # [px]
             "centering_position": [0.6, 0.5],
             "scaling": 5.5,
             "show_trajectories": False,
@@ -190,17 +189,17 @@ class AbstractEnv(gym.Env):
         """
         super().reset(seed=seed)
 
-        self.define_spaces()  # First, to set the controlled vehicle class depending on action space
+        # self.define_spaces()  # First, to set the controlled vehicle class depending on action space
         self.time = self.steps = 0
         self.done = False
         self.vehicle_speed = []
         self.vehicle_pos = []
         self._reset(num_CAV=num_CAV)
-        self.define_spaces()  # Second, to link the obs and actions to the vehicles once the scene is created
+        # self.define_spaces()  # Second, to link the obs and actions to the vehicles once the scene is created
         # set the vehicle id for visualizing
         for i, v in enumerate(self.road.vehicles):
             v.id = i
-        obs, num_affected_radars = self.observation_type.observe()
+        obs = self.observation_type.observe()
         # get action masks
         if self.config["action_masking"]:
             available_actions = [[0] * self.n_a] * len(self.controlled_vehicles)
@@ -753,7 +752,7 @@ class AbstractEnv(gym.Env):
         # action is a tuple, e.g., (2, 3, 0, 1)
         self._simulate(self.new_action)
 
-        obs, num_affected_radars = self.observation_type.observe()
+        obs = self.observation_type.observe()
         reward = self._reward(action)
         terminal = self._is_terminal()
 
@@ -803,7 +802,6 @@ class AbstractEnv(gym.Env):
             "vehicle_speed": self.vehicle_speed,
             "vehicle_position": self.vehicle_pos,
             "merged": merged,
-            "num_affected_radars": num_affected_radars,
         }
 
         # if terminal:
