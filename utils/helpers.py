@@ -50,9 +50,23 @@ def env_step(env, action, render=False):
         action = np.argmax(action)  # one-hot to int
     next_obs, reward, done, _, info = env.step(action)
 
+    ACTIONS_ALL = {
+        0: 'LANE_LEFT',
+        1: 'IDLE',
+        2: 'LANE_RIGHT',
+        3: 'FASTER',
+        4: 'SLOWER'
+    }
+
     if render:
+        # print(env.unwrapped.observation_type.affected_radars_data)
+        # print(env.unwrapped.controlled_vehicles[0].target_speed)
+        # print(env.unwrapped.controlled_vehicles[0].speed)
+        print(ACTIONS_ALL[action])
+        # print(env.unwrapped.controlled_vehicles[0].target_lane_index)
+        print()
         env.render()
-        time.sleep(0.1)
+        time.sleep(0.2)
 
     # TODO add more general observation preprocessor
     next_obs = next_obs.flatten()

@@ -59,14 +59,7 @@ class IDMVehicle(ControlledVehicle):
         config=None,
     ):
         super().__init__(
-            road,
-            position,
-            heading,
-            speed,
-            target_lane_index,
-            target_speed,
-            route,
-            config,
+            road, position, heading, speed, target_lane_index, target_speed, route, config
         )
         self.enable_lane_change = enable_lane_change
         self.timer = timer or (np.sum(self.position) * np.pi) % self.LANE_CHANGE_DELAY
@@ -125,7 +118,7 @@ class IDMVehicle(ControlledVehicle):
 
         # only decelearte if we are on the wrong lane
         if not self.on_track():
-            self.alpha_v0 = max(0.2, distance_to_exit / self.duTactical)
+            self.alpha_v0 = max(0.4, distance_to_exit / self.duTactical)
         else:  # reset after passing exit
             self.alpha_v0 = 1
 
@@ -159,16 +152,11 @@ class IDMVehicle(ControlledVehicle):
             self.lane_index == ("b", "c", 0) or self.lane_index == ("b", "c", 1)
         ) and self.RIGHT_BIAS < -0.01:
             return True
-        elif (
-            self.lane_index
-            == (
-                "b",
-                "c",
-                2,
-            )
-            # and self.RIGHT_BIAS > 0.1
-        ):
-            # Merging vehicles
+        elif self.lane_index == (
+            "b",
+            "c",
+            2,
+        ):  # Merging vehicles #and self.RIGHT_BIAS > 0.1:
             return True
         else:
             return False

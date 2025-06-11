@@ -36,12 +36,7 @@ class Vehicle(object):
     """ Maximum reachable speed [m/s] """
 
     def __init__(
-        self,
-        road: Road,
-        position: Vector,
-        heading: float = 0.0,
-        speed: float = 0.0,
-        config=None,
+        self, road: Road, position: Vector, heading: float = 0.0, speed: float = 0.0, config=None,
     ):
         self.road = road
         # self.position = np.array(position, dtype=float)
@@ -78,8 +73,7 @@ class Vehicle(object):
             np.random.normal(0, 14) / 1000
         )  # [ms] offset in milliseconds
         self.frame_time = (
-            np.maximum(np.random.normal(10, 3), 5)
-            / 1000  # set a lower bound of atleast 5ms
+            np.maximum(np.random.normal(60, 3), 20) / 1000  # set a lower bound of atleast 5ms
         )  # [ms] duration of one radar frame
 
     @classmethod
@@ -263,9 +257,16 @@ class Vehicle(object):
 
     def _is_colliding(self, other):
         # Fast spherical pre-check
+        # if utils.norm(other.position, self.position) > self.LENGTH:
         if utils.norm(other.position, self.position) > self.LENGTH_SQUARE:
             return False
         # Accurate rectangular check
+        # old
+        # return utils.rotated_rectangles_intersect((self.position, 0.9 * self.LENGTH, 0.9 * self.WIDTH, self.heading),
+        # (
+        # other.position, 0.9 * other.LENGTH, 0.9 * other.WIDTH, other.heading))
+
+        # new
         rect = utils.middle_to_vertices(
             self.position, self.LENGTH, self.WIDTH, self.heading
         )
@@ -341,7 +342,7 @@ class Vehicle(object):
 
     def __str__(self):
         # return "{} #{}: {}".format(self.__class__.__name__, id(self) % 1000, self.position)
-        return f"#{self.id} {self.dutycycle} {self.dutycycle_offset} {self.frame_time}"
+        return f"#{self.id}"
 
     def __repr__(self):
         return self.__str__()

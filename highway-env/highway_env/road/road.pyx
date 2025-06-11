@@ -397,7 +397,7 @@ class Road(object):
                         s_v = v.position[0]
                     elif lane_index == ("k", "b", 0) and (
                             v.lane_index == ("j", "k", 0) or v.lane_index == ("k", "b", 0) or v.lane_index == (
-                    "b", "c", 1)):
+                    "b", "c", 2)):
                         # s_v, lat_v = v.position
                         s_v = v.position[0]
                     elif lane_index == ("b", "c", 1) and (
