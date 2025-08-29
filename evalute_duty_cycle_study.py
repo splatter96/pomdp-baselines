@@ -3,7 +3,7 @@ import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
 
-df = pd.read_csv("duty_cycle_study.csv", sep=",")
+df = pd.read_csv("duty_cycle_study_new.csv", sep=",")
 
 sns.set_theme("paper")
 sns.set_palette("Paired")
@@ -36,10 +36,11 @@ g = sns.relplot(
     aspect=2,
 )
 
-sns.move_legend(g, "upper left", bbox_to_anchor=(0.12, 0.55))
+sns.move_legend(g, "upper left", bbox_to_anchor=(0.12, 0.6))
+# sns.move_legend(g, "upper left", bbox_to_anchor=(0.12, 0.95))
 g.set_axis_labels("Evaluated Duty cycle [%]", "Merge Rate")
 g._legend.set_title("Trained on duty cycle [%]")
 
 
 # plt.show()
-plt.savefig("plot_mergerate.png", dpi=600, bbox_inches="tight")
+plt.savefig("plot_mergerate_with_zero.png", dpi=600, bbox_inches="tight")
