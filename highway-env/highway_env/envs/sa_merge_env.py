@@ -79,6 +79,10 @@ class SingleAgentMergeEnv(AbstractEnv):
         else:
             Merging_lane_cost = 0
 
+        # print(f"Merge lane cost {Merging_lane_cost}")
+        # print(f"Vehicle pos {vehicle.position[0]}")
+        # print(sum(self.ends[:3]))
+
         # give penalty if the agent drives on the offramp
         if vehicle.lane_index == ("c", "o", 0):
             offramp_cost = -self.config["offramp_reward"]
@@ -135,6 +139,10 @@ class SingleAgentMergeEnv(AbstractEnv):
             # easy mode: 13-15 HDVs
             num_HDV = np.random.choice(np.arange(13, 16), 1)[0]
             # num_HDV = np.random.choice(np.arange(16, 19), 1)[0]
+
+        if "num_HDV" in self.config:
+            num_HDV = self.config["num_HDV"]
+
         self._make_vehicles(num_CAV, num_HDV)
         self.T = int(self.config["duration"] * self.config["policy_frequency"])
 
@@ -148,7 +156,12 @@ class SingleAgentMergeEnv(AbstractEnv):
 
         # Highway lanes
         # self.ends = [150, 80, 200, 150]  # Before, converging, merge, after
-        self.ends = [150, 80, 80, 150]  # Before, converging, merge, after
+        self.ends = [
+            150,
+            80,
+            float(self.config["merge_length"]),
+            150,
+        ]  # Before, converging, merge, after
         # self.ends = [150, 80, 40, 40, 150]  # Before, converging, merge, after
 
         c, s, n = LineType.CONTINUOUS_LINE, LineType.STRIPED, LineType.NONE
@@ -238,6 +251,82 @@ class SingleAgentMergeEnv(AbstractEnv):
         )
         # road.objects.append(Obstacle(road, lbc.position(self.ends[2], 0)))
         self.road = road
+
+    def _spawn_more_vehicles(self, num_HDV=1) -> None:
+        road = self.road
+        other_vehicles_type = utils.class_from_path(self.config["other_vehicles_type"])
+
+        # spawn_points_s1 = [10, 50]
+        # spawn_points_s2 = [0, 40]
+        spawn_points_s1 = [0]
+        spawn_points_s2 = [0]
+
+        # initial speed with noise and location noise
+        initial_speed = np.random.rand(num_HDV) * 8 + 22  # range from [25, 30]
+        loc_noise = np.random.rand(num_HDV) * 6 - 3  # range from [-1.5, 1.5]
+        initial_speed = list(initial_speed)
+
+        """Spawn points for HDV"""
+        # spawn point indexes on the straight road
+        spawn_point_s_h1 = np.random.choice(spawn_points_s1, num_HDV, replace=False)
+        spawn_point_s_h2 = np.random.choice(spawn_points_s2, num_HDV, replace=False)
+
+        right_bias = self.config["right_bias"]
+        offramp_percentage = 0.3
+        biases = list(
+            np.random.choice(
+                [-right_bias, right_bias],
+                num_HDV,
+                p=[1 - offramp_percentage, offramp_percentage],
+            )
+        )
+
+        """Randomly spawn vehicle on one of the through lanes"""
+        rand_val = np.random.choice(2, 1)
+
+        if rand_val == 0:
+            veh = other_vehicles_type(
+                road,
+                road.network.get_lane(("a", "b", 0)).position(
+                    spawn_point_s_h1 + loc_noise, 0
+                ),
+                speed=initial_speed.pop(0),
+                config=self.config,
+            )
+
+            veh.RIGHT_BIAS = biases.pop(0)
+            veh.color = (
+                VehicleGraphics.BLUE
+                if veh.RIGHT_BIAS == right_bias
+                else VehicleGraphics.GREEN
+            )
+            if self._compute_headway_distance(veh) > 1.5 * veh.speed:
+                road.vehicles.append(veh)
+
+        else:
+            veh = other_vehicles_type(
+                road,
+                road.network.get_lane(("a", "b", 1)).position(
+                    spawn_point_s_h2 + loc_noise, 0
+                ),
+                speed=initial_speed.pop(0),
+                config=self.config,
+            )
+
+            veh.RIGHT_BIAS = biases.pop(0)
+            veh.color = (
+                VehicleGraphics.BLUE
+                if veh.RIGHT_BIAS == right_bias
+                else VehicleGraphics.GREEN
+            )
+            if self._compute_headway_distance(veh) > 1.5 * veh.speed:
+                road.vehicles.append(veh)
+
+        # reenumerate vehilces
+        for i, v in enumerate(self.road.vehicles):
+            v.id = i
+
+        return
 
     def _make_vehicles(self, num_CAV=1, num_HDV=3) -> None:
         """
@@ -345,7 +434,8 @@ class SingleAgentMergeEnv(AbstractEnv):
         spawn_point_s_h2 = list(spawn_point_s_h2)
         spawn_point_m_h = list(spawn_point_m_h)
 
-        right_bias = 8.0
+        # right_bias = 8.0
+        right_bias = self.config["right_bias"]
         offramp_percentage = 0.3
         biases = list(
             np.random.choice(

@@ -756,6 +756,9 @@ class AbstractEnv(gym.Env):
         reward = self._reward(action)
         terminal = self._is_terminal()
 
+        if self.time % 3 == 0:
+            self._spawn_more_vehicles()
+
         # get action masks
         if self.config["action_masking"]:
             available_actions = [[0] * self.n_a] * len(self.controlled_vehicles)
