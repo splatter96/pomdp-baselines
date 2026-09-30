@@ -1,4 +1,3 @@
-# -*- coding: future_fstrings -*-
 import os, sys
 import time
 import pickle
@@ -48,6 +47,7 @@ class Learner:
 
         self.init_eval(**eval_args)
 
+
     def init_env(
         self,
         env_type,
@@ -88,6 +88,7 @@ class Learner:
                 self.train_env.config.update(kwargs)
             self.train_env.reset(seed=self.seed)
             self.train_env.action_space.seed(self.seed)  # crucial
+
 
             self.eval_env = self.train_env
             # self.eval_env.seed(self.seed + 1)
@@ -285,6 +286,7 @@ class Learner:
 
         self._start_training()
 
+
         if self.num_init_rollouts_pool > 0:
             logger.log("Collecting initial pool of data..")
             while (
@@ -312,30 +314,42 @@ class Learner:
         last_eval_num_iters = 0
         while self._n_env_steps_total < self.n_env_steps_total:
             # collect data from num_rollouts_per_iter train tasks:
+
+            start = time.time()
             env_steps = self.collect_rollouts(num_rollouts=self.num_rollouts_per_iter)
             logger.log("env steps", self._n_env_steps_total)
+            end = time.time()
+            print(f"Collect rollouts took {end-start}s")
 
             # TODO only update targets every target_update_interval timesteps
+            start = time.time()
             train_stats = self.update(
                 self.num_updates_per_iter
                 if isinstance(self.num_updates_per_iter, int)
                 else int(math.ceil(self.num_updates_per_iter * env_steps))
             )  # NOTE: ceil to make sure at least 1 step
             self.log_train_stats(train_stats)
+            end = time.time()
+
+            print(f"update took {end-start}s\n\n")
 
             # evaluate and log
             current_num_iters = self._n_env_steps_total // (
                 self.num_rollouts_per_iter * self.max_trajectory_len
             )
+            print(f"Current num iters: {current_num_iters}")
             if (
                 current_num_iters != last_eval_num_iters
                 and current_num_iters % self.log_interval == 0
             ):
                 last_eval_num_iters = current_num_iters
+                start = time.time()
                 perf = self.log()
+                end = time.time()
+                print(f"Log took {end-start}s\n\n\n")
                 if (
                     self.save_interval > 0
-                    and self._n_env_steps_total > 0.75 * self.n_env_steps_total
+                    #and self._n_env_steps_total > 0.75 * self.n_env_steps_total
                     and current_num_iters % self.save_interval == 0
                 ):
                     # save models in later training stage
@@ -354,7 +368,9 @@ class Learner:
         for idx in range(num_rollouts):
             steps = 0
 
+
             obs = ptu.from_numpy(self.train_env.reset()[0])  # reset
+
 
             # TODO create more universal preprocessor for observations
             obs = obs.flatten()

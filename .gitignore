@@ -28,3 +28,6 @@ highway-env/build
 *.html
 
 *.c
+# pixi environments
+.pixi/*
+!.pixi/config.toml

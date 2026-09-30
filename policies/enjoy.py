@@ -1,4 +1,3 @@
-# -*- coding: future_fstrings -*-
 import sys, os, time
 
 t0 = time.time()
