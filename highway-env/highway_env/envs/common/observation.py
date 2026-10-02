@@ -8,7 +8,6 @@ import pandas as pd
 import scipy.stats as stats
 
 from highway_env import utils
-from highway_env.envs.common.finite_mdp import compute_ttc_grid
 from highway_env.road.lane import AbstractLane
 from highway_env.vehicle.controller import MDPVehicle
 
@@ -515,6 +514,7 @@ class LidarObservation(ObservationType):
         maximum_range: float = 150,
         normalize: bool = True,
         enable_interference=True,
+        multi_interferer: str = "worst",
         **kwargs,
     ):
         super().__init__(env, **kwargs)
@@ -538,13 +538,13 @@ class LidarObservation(ObservationType):
         self.ego_frametime = -1
 
         ## Parmeters for the interference modelling
-        self.rho_c = 30  # [dBsm] Radar Cross Section
+        self.rho_c = 10  # [dBsm] Radar Cross Section
         self.T = 10  # [dB] SRI threshold
         self.f = 76.5e9  # [Hz] center frequency
         self.c = 3e8  # [m/s] speed of light
         self.P0 = 10  # [dBm] transmit power to antenna
         self.a = 2  # path loss exponent
-        self.Gt = 45  # [dBi] max Antenna gain
+        self.Gt = 13  # [dBi] max Antenna gain
 
         # Rician Channel model parameters
         # see https://comyx.readthedocs.io/latest/_modules/comyx/fading/rician.html#Rician
@@ -566,27 +566,28 @@ class LidarObservation(ObservationType):
 
         self.enable_interference = enable_interference
 
+        # how to combine multiple interferers in line of sight of one ego radar:
+        #   "worst": only the strongest (closest) interferer is considered
+        #   "sum":   the powers of all interferers are summed
+        if multi_interferer not in ("worst", "sum"):
+            raise ValueError(
+                f"multi_interferer must be 'worst' or 'sum', got {multi_interferer!r}"
+            )
+        print(f"Using multi_interferer {multi_interferer}")
+        self.multi_interferer = multi_interferer
+
+        # which of the num_radars radars perceives interference this timestep
+        self.radars_affected_for_whole_timestep = np.zeros(
+            self.num_radars, dtype=bool
+        )
+
     def space(self) -> spaces.Space:
         high = 1 if self.normalize else self.maximum_range
-        # return spaces.Box(shape=(self.cells, 2), low=-high, high=high, dtype=np.float32)
-        # return spaces.Box(shape=(self.cells+1, 2), low=-high, high=high, dtype=np.float32)
         return spaces.Box(
             shape=(self.cells + 2, 2), low=-high, high=high, dtype=np.float32
         )
 
-        # return spaces.Dict({
-        # "lidar": spaces.Box(shape=(self.cells, 2), low=-high, high=high, dtype=np.float32),
-        # "ego": spaces.Box(shape=(4,), low=-1, high=1)
-        # })
-
     def observe(self):
-        # obs = self.trace(
-        # self.observer_vehicle.position, self.observer_vehicle.velocity
-        # ).copy()
-        # if self.normalize:
-        # obs /= self.maximum_range
-        # return obs
-
         self.grid = utils.trace(
             self.observer_vehicle.position,
             self.observer_vehicle.velocity,
@@ -599,6 +600,11 @@ class LidarObservation(ObservationType):
         self.origin = self.observer_vehicle.position.copy()
         obs = self.grid.copy()
 
+        # reset per-timestep interference flag before (re)computing it
+        self.radars_affected_for_whole_timestep = np.zeros(
+            self.num_radars, dtype=bool
+        )
+
         self.grid_radar = obs[:, 0:1].copy()
 
         ######
@@ -606,7 +612,6 @@ class LidarObservation(ObservationType):
         #####
 
         if self.enable_interference:
-            # print("interference enabled")
             # add radar index to observation
             index = np.arange(obs.shape[0])  # create index array for indexing
             cells_per_radar = self.cells / self.num_radars
@@ -621,9 +626,6 @@ class LidarObservation(ObservationType):
 
             ego_duty_cycle = self.env.controlled_vehicles[0].dutycycle
             ego_offset = self.env.controlled_vehicles[0].dutycycle_offset
-
-            # print(f"ego duty cycle {ego_duty_cycle}")
-            # print(f"ego offset {ego_offset}")
 
             if self.ego_frametime == -1:
                 self.ego_frametime = self.env.controlled_vehicles[0].frame_time
@@ -659,19 +661,19 @@ class LidarObservation(ObservationType):
 
             def get_channel(size):
                 return (
-                    stats.rice.rvs(self.nu / self.sigma, scale=self.sigma, size=size)
+                    stats.rice.rvs(self.nu / self.sigma, scale=self.sigma, size=size) 
                     ** 2
                 )
 
             def interference(dist):
-                return self.gamma1 * self.P0 * dist**-self.a
+                return self.gamma1 * self.P0 * dist**-self.a * get_channel(1)
 
             def signal(dist):
                 return (
                     self.gamma1
                     * self.gamma2
                     * self.P0
-                    * get_channel(dist.shape[0])
+                    #* get_channel(dist.shape[0])
                     * dist ** (-2 * self.a)
                 )
 
@@ -704,21 +706,20 @@ class LidarObservation(ObservationType):
                     np.unique(affected_obs[:, 3], return_index=True)[1][1:],
                 )
 
-                # calculate minimum interferer distance per radar
+                # interferer power per radar:
+                #   "worst": strongest (closest) interferer only
+                #   "sum":   sum of the powers of all interferers in this radar's view
                 for j, radar in enumerate(affected_radars):
-                    min_interferer_dist = np.min(distance_per_radar[j])
+                    if self.multi_interferer == "sum":
+                        int_power = np.sum(interference(distance_per_radar[j]))
+                    else:
+                        int_power = interference(np.min(distance_per_radar[j]))
 
                     sig_power = signal(
                         obs_per_frame[i][obs_per_frame[i, :, 3] == radar][:, 0]
                     )  # signal powers of targets
 
-                    int_power = interference(
-                        min_interferer_dist
-                    )  # signal power of interferer
-
                     detections = detection(sig_power, int_power)
-                    # detections_sum += detections.sum()
-                    # detections_count += detections.shape[0]
 
                     # create a mask to select the observations for current radar
                     mask = obs_per_frame[i, :, 3] == radar
@@ -728,7 +729,8 @@ class LidarObservation(ObservationType):
                         # detections, dist_of_radar, self.maximum_range
                         detections,
                         dist_of_radar,
-                        0,
+                        #0, # 0 distance when interference
+                        self.maximum_range # max range when interference
                     )
                     vel_of_radar = obs_per_frame[i, mask, 1]
                     interfered_vel = np.where(detections, vel_of_radar, 0)
@@ -739,6 +741,10 @@ class LidarObservation(ObservationType):
 
             radars_affected_for_whole_timestep = np.all(
                 affected_radars_per_frame, axis=0
+            )
+            # expose which radars (of the 4) perceive interference this timestep
+            self.radars_affected_for_whole_timestep = (
+                radars_affected_for_whole_timestep
             )
             #num_affected_radars = radars_affected_for_whole_timestep.sum()
             #print(num_affected_radars)
@@ -758,33 +764,6 @@ class LidarObservation(ObservationType):
                 axis=0
             )  # multiply with the non zero elments to have the ones per frame that are not intefered with
 
-            # get the number of actually modified observations
-            # modified_vels = np.count_nonzero(obs[:, 1], axis=0)
-            # print(f"modified entries {original_vels-modified_vels}")
-
-        # downsample the amount of cells for actual usage of agent
-        # output_cells = self.cells
-        # combined_cells = int(self.cells_radar / output_cells)
-        # output_obs = np.zeros((output_cells, 2))
-
-        # dist = obs[:, 0]
-        # vel = obs[:, 1]
-        # for i in range(output_cells):
-        #     # set distance to the minimum of the cells we combine
-        #     output_obs[i, 0] = dist[
-        #         i * combined_cells : (i + 1) * combined_cells
-        #     ].min()
-
-        #     # set velocity to the velocity of the cell which is closest within the ones we combine
-        #     closest_hit = dist[
-        #         i * combined_cells : (i + 1) * combined_cells
-        #     ].argmin()
-        #     output_obs[i, 1] = vel[i * combined_cells + closest_hit]
-
-        # # overwrite internal grid for visualization
-        # self.grid = output_obs
-
-        # obs = output_obs.copy()
 
         ###
         # end interference calculations
@@ -814,8 +793,6 @@ class LidarObservation(ObservationType):
         ego_pos[0] = distance_to_exit
 
         # normalize ego_pos same as in KinematicObservation
-        # ego_pos[0] = utils.lmap(ego_pos[0], [-5.0 * MDPVehicle.SPEED_MAX, 5.0 * MDPVehicle.SPEED_MAX], [-1, 1])
-        # ego_pos[0] = utils.lmap(ego_pos[0], [-460, 460], [-1, 1])
         ego_pos[0] = utils.lmap(ego_pos[0], [-200, 200], [-1, 1])
         ego_pos[1] = utils.lmap(ego_pos[1], [-12, 12], [-1, 1])
         ego_pos[2] = utils.lmap(
@@ -829,78 +806,10 @@ class LidarObservation(ObservationType):
             [-1, 1],
         )
 
-        # obs = np.vstack([obs, ego_pos])
-        # obs = {"lidar": obs, "ego": ego_pos}
         ego_pos = np.reshape(ego_pos, (2, 2))
         obs = np.vstack([obs[:, :2], ego_pos])
 
         return obs
-
-    def trace(self, origin: np.ndarray, origin_velocity: np.ndarray) -> np.ndarray:
-        self.origin = origin.copy()
-        self.grid = np.ones((self.cells, 2)) * self.maximum_range
-
-        for obstacle in self.env.road.vehicles + self.env.road.objects:
-            if obstacle is self.observer_vehicle:  # or not obstacle.solid:
-                continue
-            center_distance = np.linalg.norm(obstacle.position - origin)
-            if center_distance > self.maximum_range:
-                continue
-            center_angle = self.position_to_angle(obstacle.position, origin)
-            center_index = self.angle_to_index(center_angle)
-            distance = center_distance - obstacle.WIDTH / 2
-            if distance <= self.grid[center_index, self.DISTANCE]:
-                direction = self.index_to_direction(center_index)
-                velocity = (obstacle.velocity - origin_velocity).dot(direction)
-                self.grid[center_index, :] = [distance, velocity]
-
-            # Angular sector covered by the obstacle
-            corners = utils.rect_corners(
-                obstacle.position, obstacle.LENGTH, obstacle.WIDTH, obstacle.heading
-            )
-            angles = [self.position_to_angle(corner, origin) for corner in corners]
-            min_angle, max_angle = min(angles), max(angles)
-            if (
-                min_angle < -np.pi / 2 < np.pi / 2 < max_angle
-            ):  # Object's corners are wrapping around +pi
-                min_angle, max_angle = max_angle, min_angle + 2 * np.pi
-            start, end = self.angle_to_index(min_angle), self.angle_to_index(max_angle)
-            if start < end:
-                indexes = np.arange(start, end + 1)
-            else:  # Object's corners are wrapping around 0
-                indexes = np.hstack(
-                    [np.arange(start, self.cells), np.arange(0, end + 1)]
-                )
-
-            # Actual distance computation for these sections
-            for index in indexes:
-                direction = self.index_to_direction(index)
-                ray = (origin, origin + self.maximum_range * direction)
-                # distance = utils.distance_to_rect(*ray, corners)
-                distance = utils.distance_to_rect2(*ray, corners, self.maximum_range)
-                # distance2 = utils.distance_to_rect(*ray, corners)
-                # assert abs(distance - distance2) < 0.0001 or distance == distance2
-                if distance <= self.grid[index, self.DISTANCE]:
-                    velocity = (obstacle.velocity - origin_velocity).dot(direction)
-                    self.grid[index, :] = [distance, velocity]
-        return self.grid
-
-    def position_to_angle(self, position: np.ndarray, origin: np.ndarray) -> float:
-        return (
-            np.arctan2(position[1] - origin[1], position[0] - origin[0])
-            + self.angle / 2
-        )
-
-    def position_to_index(self, position: np.ndarray, origin: np.ndarray) -> int:
-        return self.angle_to_index(self.position_to_angle(position, origin))
-
-    def angle_to_index(self, angle: float) -> int:
-        return int(np.floor(angle / self.angle)) % self.cells
-
-    def index_to_direction(self, index: np.ndarray) -> np.ndarray:
-        # return np.array([np.cos(index * self.angle), np.sin(index * self.angle)])
-        return self.directions[index]
-
 
 class MultiAgentObservation(ObservationType):
     def __init__(self, env: "AbstractEnv", observation_config: dict, **kwargs) -> None:

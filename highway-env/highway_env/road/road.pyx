@@ -57,6 +57,16 @@ class RoadNetwork(object):
             _id = 0
         return self.graph[_from][_to][_id]
 
+    def all_side_lanes(self, lane_index: LaneIndex) -> list[LaneIndex]:
+        """
+        :param lane_index: the index of a lane.
+        :return: all lanes belonging to the same road.
+        """
+        return [
+            (lane_index[0], lane_index[1], i)
+            for i in range(len(self.graph[lane_index[0]][lane_index[1]]))
+        ]
+
     def get_closest_lane_index(self, position: np.ndarray, heading: Optional[float] = None) -> LaneIndex:
         """
         Get the index of the lane closest to a world position.
@@ -65,13 +75,6 @@ class RoadNetwork(object):
         :param heading: a heading angle [rad].
         :return: the index of the closest lane.
         """
-        # indexes, distances = [], []
-        # for _from, to_dict in self.graph.items():
-            # for _to, lanes in to_dict.items():
-                # for _id, l in enumerate(lanes):
-                    # distances.append(l.distance_with_heading(position, heading))
-                    # indexes.append((_from, _to, _id))
-        # return indexes[utils.argmin(distances)]
 
         if not self.lane_indices:
             for _from, to_dict in self.graph.items():
@@ -79,13 +82,8 @@ class RoadNetwork(object):
                     for _id, l in enumerate(lanes):
                         self.lane_indices.append((_from, _to, _id))
                         self.lanes.append(self.get_lane((_from, _to, _id)))
-        # for l in self.lane_indices:
-            # print(l)
-            # print(self.get_lane(l).distance_with_heading(position, heading))
 
-        # return min(self.lane_indices, key=lambda l:self.get_lane(l).distance_with_heading(position, float(heading)))
         return utils.get_closest_lane(self.lane_indices, self.lanes, position, heading)
-
 
     def next_lane(self, current_index: LaneIndex, route: Route = None, position: np.ndarray = None,
                   np_random: np.random.RandomState = np.random) -> LaneIndex:
@@ -110,14 +108,10 @@ class RoadNetwork(object):
                 route.pop(0)
             if route and route[0][0] == _to:  # Next road in route is starting at the end of current road.
                 _, next_to, _ = route[0]
-            # elif route:
-                # logger.warning("Route {} does not start after current road {}.".format(route[0], current_index))
 
         # pick closest next road
         if not next_to:
             try:
-                # next_to = list(self.graph[_to].keys())[np.random.randint(len(self.graph[_to]))]
-
                 lane_candidates = []
                 for next_to in list(self.graph[_to].keys()):
                     for l in range(len(self.graph[_to][next_to])):
@@ -127,53 +121,6 @@ class RoadNetwork(object):
                 return next_lane
             except KeyError:
                 return current_index
-
-        # If next road has same number of lane, stay on the same lane
-        # if len(self.graph[_from][_to]) == len(self.graph[_to][next_to]):
-            # next_id = _id
-        # # Else, pick closest lane
-        # else:
-            # lanes = range(len(self.graph[_to][next_to]))
-            # next_id = min(lanes,
-                          # key=lambda l: self.get_lane((_to, next_to, l)).distance(position))
-
-        # return _to, next_to, next_id
-
-    def bfs_paths(self, start: str, goal: str) -> List[List[str]]:
-        """
-        Breadth-first search of all routes from start to goal.
-
-        :param start: starting node
-        :param goal: goal node
-        :return: list of paths from start to goal.
-        """
-        queue = [(start, [start])]
-        while queue:
-            (node, path) = queue.pop(0)
-            if node not in self.graph:
-                yield []
-            for _next in set(self.graph[node].keys()) - set(path):
-                if _next == goal:
-                    yield path + [_next]
-                elif _next in self.graph:
-                    queue.append((_next, path + [_next]))
-
-    def shortest_path(self, start: str, goal: str) -> List[str]:
-        """
-        Breadth-first search of shortest path from start to goal.
-
-        :param start: starting node
-        :param goal: goal node
-        :return: shortest path from start to goal.
-        """
-        return next(self.bfs_paths(start, goal), [])
-
-    def all_side_lanes(self, lane_index: LaneIndex) -> List[LaneIndex]:
-        """
-        :param lane_index: the index of a lane.
-        :return: all lanes belonging to the same road.
-        """
-        return [(lane_index[0], lane_index[1], i) for i in range(len(self.graph[lane_index[0]][lane_index[1]]))]
 
     def side_lanes(self, lane_index: LaneIndex) -> List[LaneIndex]:
         """
@@ -416,7 +363,6 @@ class Road(object):
                     v_rear = v
         return v_front, v_rear
 
-    # @profile
     def neighbour_vehicles(self, vehicle: 'kinematics.Vehicle', lane_index: LaneIndex = None) \
             -> Tuple[Optional['kinematics.Vehicle'], Optional['kinematics.Vehicle']]:
         """

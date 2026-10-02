@@ -5,10 +5,9 @@ import numpy as np
 import pygame
 
 from highway_env.types import Vector
-from highway_env.vehicle.dynamics import BicycleVehicle
 from highway_env.vehicle.kinematics import Vehicle
 from highway_env.vehicle.controller import ControlledVehicle, MDPVehicle
-from highway_env.vehicle.behavior import IDMVehicle, LinearVehicle
+from highway_env.vehicle.behavior import IDMVehicle
 
 if TYPE_CHECKING:
     from highway_env.road.graphics import WorldSurface
@@ -52,17 +51,18 @@ class VehicleGraphics(object):
         pygame.draw.rect(vehicle_surface, cls.BLACK, rect, 1)
 
         # Tires
-        if type(vehicle) in [Vehicle, BicycleVehicle]:
-            tire_positions = [[surface.pix(tire_length), surface.pix(length / 2 - v.WIDTH / 2)],
-                              [surface.pix(tire_length), surface.pix(length / 2 + v.WIDTH / 2)],
-                              [surface.pix(length - tire_length), surface.pix(length / 2 - v.WIDTH / 2)],
-                              [surface.pix(length - tire_length), surface.pix(length / 2 + v.WIDTH / 2)]]
-            tire_angles = [0, 0, v.action["steering"], v.action["steering"]]
-            for tire_position, tire_angle in zip(tire_positions, tire_angles):
-                tire_surface = pygame.Surface((surface.pix(tire_length), surface.pix(tire_length)), pygame.SRCALPHA)
-                rect = (0, surface.pix(tire_length/2-tire_width/2), surface.pix(tire_length), surface.pix(tire_width))
-                pygame.draw.rect(tire_surface, cls.BLACK, rect, 0)
-                cls.blit_rotate(vehicle_surface, tire_surface, tire_position, np.rad2deg(-tire_angle))
+        #if type(vehicle) in [Vehicle, BicycleVehicle]:
+        # if type(vehicle) in [Vehicle]:
+        #     tire_positions = [[surface.pix(tire_length), surface.pix(length / 2 - v.WIDTH / 2)],
+        #                       [surface.pix(tire_length), surface.pix(length / 2 + v.WIDTH / 2)],
+        #                       [surface.pix(length - tire_length), surface.pix(length / 2 - v.WIDTH / 2)],
+        #                       [surface.pix(length - tire_length), surface.pix(length / 2 + v.WIDTH / 2)]]
+        #     tire_angles = [0, 0, v.action["steering"], v.action["steering"]]
+        #     for tire_position, tire_angle in zip(tire_positions, tire_angles):
+        #         tire_surface = pygame.Surface((surface.pix(tire_length), surface.pix(tire_length)), pygame.SRCALPHA)
+        #         rect = (0, surface.pix(tire_length/2-tire_width/2), surface.pix(tire_length), surface.pix(tire_width))
+        #         pygame.draw.rect(tire_surface, cls.BLACK, rect, 0)
+        #         cls.blit_rotate(vehicle_surface, tire_surface, tire_position, np.rad2deg(-tire_angle))
 
         # Centered rotation
         h = v.heading if abs(v.heading) > 2 * np.pi / 180 else 0
@@ -147,8 +147,6 @@ class VehicleGraphics(object):
             color = vehicle.color
         elif vehicle.crashed:
             color = cls.RED
-        elif isinstance(vehicle, LinearVehicle):
-            color = cls.YELLOW
         elif isinstance(vehicle, IDMVehicle):
             color = cls.GREEN
         elif isinstance(vehicle, MDPVehicle):
