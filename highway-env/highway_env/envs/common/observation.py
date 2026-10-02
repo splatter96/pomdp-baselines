@@ -515,6 +515,8 @@ class LidarObservation(ObservationType):
         normalize: bool = True,
         enable_interference=True,
         multi_interferer: str = "worst",
+        RCS: float = 10.0,  # [dBsm] Radar Cross Section, linearized below
+        T: float = 10.0,  # [dB] SIR threshold, linearized below
         **kwargs,
     ):
         super().__init__(env, **kwargs)
@@ -538,8 +540,9 @@ class LidarObservation(ObservationType):
         self.ego_frametime = -1
 
         ## Parmeters for the interference modelling
-        self.rho_c = 10  # [dBsm] Radar Cross Section
-        self.T = 10  # [dB] SRI threshold
+        # linearize the dB inputs so they can be used in the power equations
+        self.rho_c = 10 ** (RCS / 10)  # [m^2] Radar Cross Section (RCS given in [dBsm])
+        self.T = 10 ** (T / 10)  # [-] SIR threshold (T given in [dB])
         self.f = 76.5e9  # [Hz] center frequency
         self.c = 3e8  # [m/s] speed of light
         self.P0 = 10  # [dBm] transmit power to antenna
@@ -729,8 +732,8 @@ class LidarObservation(ObservationType):
                         # detections, dist_of_radar, self.maximum_range
                         detections,
                         dist_of_radar,
-                        #0, # 0 distance when interference
-                        self.maximum_range # max range when interference
+                        0, # 0 distance when interference
+                        #self.maximum_range # max range when interference
                     )
                     vel_of_radar = obs_per_frame[i, mask, 1]
                     interfered_vel = np.where(detections, vel_of_radar, 0)

@@ -1,4 +1,5 @@
 import os, sys
+import csv
 import time
 import pickle
 from utils import system, logger
@@ -72,6 +73,11 @@ class Learner:
         self.env_type = env_type
         self.env_args = kwargs
 
+        # keep the *un-split* env id for (re)building envs, e.g. the vector rollout env
+        # (main.py may pass a hyphen-joined id such as "merge-single-agent-v0")
+        self._env_name = env_name
+        self.vec_train_env = None
+
         if self.env_type in [
             "pomdp",
             "credit",
@@ -100,6 +106,10 @@ class Learner:
 
             self.max_rollouts_per_task = 1
             self.max_trajectory_len = self.train_env._max_episode_steps
+
+            # NOTE: self.train_env is deliberately NOT vectorized here — it is aliased to
+            # self.eval_env and `evaluate`/`evaluate_parallel` step it directly. Rollout
+            # collection uses a *separate* vectorized copy built in init_train.
 
         elif self.env_type == "atari":
             from envs.atari import create_env
@@ -192,6 +202,7 @@ class Learner:
         num_iters,
         num_init_rollouts_pool,
         num_rollouts_per_iter,
+        num_rollout_workers=1,
         num_updates_per_iter=None,
         sampled_seq_len=None,
         sample_weight_baseline=None,
@@ -199,6 +210,8 @@ class Learner:
         target_update_interval=None,
         **kwargs,
     ):
+        # parallel rollout collection: 1 = serial (original), >1 = AsyncVectorEnv of N
+        self.num_rollout_workers = int(num_rollout_workers)
         if num_updates_per_iter is None:
             num_updates_per_iter = 1.0
         assert isinstance(num_updates_per_iter, int) or isinstance(
@@ -253,6 +266,10 @@ class Learner:
             "total env steps",
             self.n_env_steps_total,
         )
+
+        # optionally build a vectorized (multiprocessing) env for parallel rollout collection
+        if self.num_rollout_workers > 1:
+            self._build_vec_train_env(self.num_rollout_workers)
 
     def init_eval(
         self,
@@ -361,6 +378,11 @@ class Learner:
         """collect num_rollouts of trajectories in task and save into policy buffer
         :param random_actions: whether to use policy to sample actions, or randomly sample action space
         """
+        # parallel (vectorized) rollout collection, if a vector env was set up in init_train
+        if self.vec_train_env is not None:
+            return self.collect_rollouts_vec(
+                num_rollouts, random_actions=random_actions
+            )
 
         before_env_steps = self._n_env_steps_total
         crashes = 0
@@ -487,6 +509,267 @@ class Learner:
                 )
             self._n_env_steps_total += steps
             self._n_rollouts_total += 1
+
+        logger.record_tabular("merge/crashrate", crashes / num_rollouts)
+        logger.record_tabular("merge/mergerate", merges / num_rollouts)
+        logger.dump_tabular()
+        return self._n_env_steps_total - before_env_steps
+
+    def _make_rollout_env(self):
+        """factory used to build one rollout env inside an AsyncVectorEnv worker process.
+
+        gymnasium's AsyncVectorEnv pickles this callable to each subprocess; each child
+        then constructs its own SingleAgentMergeEnv. `highway_env` is only importable via
+        the sys.path shim established in init_env, which does NOT propagate to forked
+        children, so the shim is re-established inside make_env() (child-side).
+
+        IMPORTANT: the returned closure captures only plain data (env_name, env_args) so
+        it is picklable. It must NOT capture `self` (the Learner owns torch modules).
+        """
+        env_name = self._env_name
+        env_args = dict(self.env_args)
+
+        def make_env():
+            import gymnasium as gym
+            import os as _os
+            import sys as _sys
+
+            # re-establish the highway_env import shim in this child process
+            _he = to_absolute_path("highway-env")
+            if _he not in _sys.path:
+                _sys.path.insert(0, _he)
+            import envs.pomdp  # noqa: F401  ensure POMDP registrations are live in the child
+            import highway_env  # noqa: F401  ensures merge-single-agent-v0 is registered
+
+            env = gym.make(env_name, config=dict(env_args))
+            # mirror the merge special-case from init_env (no-op for kwargs already passed)
+            if "merge" in env_name:
+                env.config.update(env_args)
+            return env
+
+        return make_env
+
+    def _build_vec_train_env(self, num_workers):
+        """Build a gymnasium AsyncVectorEnv of `num_workers` rollout envs (multiprocessing).
+
+        Kept separate from self.train_env, which is aliased to self.eval_env and stepped
+        directly by evaluate()/evaluate_parallel().
+        """
+        import gymnasium as gym
+
+        if self.env_type != "pomdp":
+            logger.log(f"[rollout] num_rollout_workers ignored: env_type={self.env_type}")
+            return
+        # ensure the env id is registered in THIS process (already done in init_env, but be safe)
+        import envs.pomdp  # noqa: F401
+        _he = to_absolute_path("highway-env")
+        if _he not in sys.path:
+            sys.path.insert(0, _he)
+        import highway_env  # noqa: F401
+
+        factory = self._make_rollout_env()
+        self.vec_train_env = gym.vector.AsyncVectorEnv(
+            [factory for _ in range(num_workers)],
+        )
+        logger.log(f"[rollout] built AsyncVectorEnv with {num_workers} workers")
+
+    @torch.no_grad()
+    def collect_rollouts_vec(self, num_rollouts, random_actions=False):
+        """Collect `num_rollouts` episodes using a gymnasium AsyncVectorEnv of N parallel
+        workers, with a single batched policy `act` (B=N) per step.
+
+        Data is written to self.policy_storage exactly like the scalar collect_rollouts:
+        add_sample() per step for Markov archs, add_episode() per finished episode for
+        recurrent archs. Notes:
+          - gymnasium auto-resets a worker on done; its terminal next_obs is the reset
+            obs, which is safe (the buffer's valid_starts mask never samples across the
+            terminal into it — same semantics as the scalar timeout path).
+          - the raw merge env always returns truncated=False; TimeLimit(500) delivers the
+            500-step cap as truncated=True + info["TimeLimit.truncated"]. `_is_terminal`
+            (crash / position>500 / off-ramp) fires early, so most episodes terminate.
+          - each finished worker's RNN hidden state is zeroed, matching the scalar's
+            per-episode get_initial_info().
+        """
+        import numpy as _np
+
+        vec = self.vec_train_env
+        N = vec.num_envs
+        before_env_steps = self._n_env_steps_total
+        crashes = 0
+        merges = 0
+        collected = 0
+        recurrent = self.agent_arch != AGENT_ARCHS.Markov
+
+        # expand the B=1 initial info to B=N (identical to running N scalar episodes)
+        prev_action = None
+        reward = None
+        internal = None
+        if recurrent:
+            pa0, r0, hs0 = self.agent.get_initial_info()
+            prev_action = pa0.new_zeros((N,) + pa0.shape[1:])
+            reward = r0.new_zeros((N,) + r0.shape[1:])
+            if isinstance(hs0, (tuple, list)):
+                internal = tuple(
+                    s.new_zeros(s.shape[0], N, s.shape[2]) for s in hs0
+                )
+            else:
+                internal = hs0.new_zeros(hs0.shape[0], N, hs0.shape[2])
+
+        # per-worker current observation (fresh episode start); seed each worker
+        # distinctly so their HDV/scene random streams differ. gymnasium >=0.28
+        # reset() returns (obs, infos), so unpack the obs.
+        cur_obs_np, _reset_infos = vec.reset(seed=[self.seed + b for b in range(N)])
+        cur_obs = ptu.from_numpy(
+            _np.asarray(cur_obs_np).reshape(N, -1)
+        ).float()
+
+        # per-worker episode accumulators (recurrent archs only)
+        if recurrent:
+            w_obs, w_act, w_rew, w_term, w_next, w_ret = [], [], [], [], [], []
+            for _ in range(N):
+                w_obs.append([]); w_act.append([]); w_rew.append([])
+                w_term.append([]); w_next.append([]); w_ret.append(0.0)
+
+        # gymnasium >=0.28 returns the vector `infos` as a flattened dict:
+        #   infos[key] -> np.ndarray of shape (N,) (object dtype with None for
+        #   sub-envs that omitted the key); infos["_"+key] -> bool presence mask.
+        # Read a per-worker boolean flag defensively.
+        def _info_flag(arr, b):
+            if arr is None:
+                return False
+            try:
+                return bool(arr[b])
+            except (IndexError, TypeError, ValueError):
+                return False
+
+        while collected < num_rollouts:
+            finished = []  # worker indices that completed an episode this step
+
+            # 1) choose actions
+            if random_actions:
+                actions_in = _np.asarray(vec.action_space.sample())  # (N,) ints
+                action = ptu.from_numpy(actions_in)
+                if not self.act_continuous:
+                    action = F.one_hot(action.long(), num_classes=self.act_dim).float()
+            elif recurrent:
+                (action, _, _, _), internal = self.agent.act(
+                    prev_internal_state=internal,
+                    prev_action=prev_action,
+                    reward=reward,
+                    obs=cur_obs,
+                    deterministic=False,
+                )  # action: (N, A) one-hot; internal: (layers, N, H)
+                prev_action = action.clone()  # feed this step's action in on the next act
+            else:
+                action, _, _, _ = self.agent.act(cur_obs, deterministic=False)
+            if not random_actions:
+                # vec.step expects raw discrete ints (N,) or continuous values (N, A)
+                if self.act_continuous:
+                    actions_in = _np.asarray(action.cpu().numpy())
+                else:
+                    actions_in = _np.asarray(torch.argmax(action, dim=-1).cpu().numpy())
+
+            # 2) step all workers in parallel
+            next_obs, rewards, terminations, truncations, infos = vec.step(actions_in)
+            rewards = _np.asarray(rewards, dtype=float)
+            terminations = _np.asarray(terminations, dtype=bool)
+            truncations = _np.asarray(truncations, dtype=bool)
+            # flattened per-step info arrays (gymnasium >=0.28)
+            crashed_arr = infos.get("crashed")
+            merged_arr = infos.get("merged")
+            if self.reward_clip and self.env_type == "atari":
+                rewards = torch.tanh(ptu.from_numpy(rewards)).numpy()
+            reward_b = ptu.from_numpy(rewards).view(-1, 1)  # (N, 1)
+            cur_next = ptu.from_numpy(_np.asarray(next_obs).reshape(N, -1)).float()
+
+            # 3) per-worker bookkeeping (cur_obs is still this step's PRE-step obs;
+            #    finished workers' cur_next is their auto-reset fresh obs)
+            for b in range(N):
+                obs_b = cur_obs[b:b + 1]
+                act_b = action[b:b + 1]
+                rew_b = reward_b[b:b + 1]
+                next_b = cur_next[b:b + 1]
+                # env auto-reset means a terminated/truncated worker has a fresh episode
+                # in flight; an episode is "done" for bookkeeping on either flag.
+                # TimeLimit (gym.make) already delivers the 500-step cap as
+                # truncations[b], so no separate TimeLimit.truncated lookup is needed.
+                done_b = bool(terminations[b])
+                is_trunc = bool(truncations[b])
+                # term: early stop (terminated, not truncated) — mirrors scalar
+                term_b = bool(done_b and not is_trunc)
+                # per-step crash/merge accounting (mirrors scalar's info checks)
+                if _info_flag(crashed_arr, b):
+                    crashes += 1
+                elif _info_flag(merged_arr, b) and done_b:
+                    merges += 1
+                if self.agent_arch == AGENT_ARCHS.Markov:
+                    # per-step Markov sample (mirrors scalar collect_rollouts)
+                    self.policy_storage.add_sample(
+                        observation=ptu.get_numpy(obs_b.squeeze(0)),
+                        action=ptu.get_numpy(
+                            act_b.squeeze(0)
+                            if self.act_continuous
+                            else torch.argmax(act_b.squeeze(0), dim=-1, keepdims=True)
+                        ),
+                        reward=ptu.get_numpy(rew_b.squeeze(0)),
+                        terminal=_np.array([term_b], dtype=float),
+                        next_observation=ptu.get_numpy(next_b.squeeze(0)),
+                    )
+                else:
+                    # append every step to the per-worker episode accumulators
+                    w_obs[b].append(obs_b)
+                    w_act[b].append(act_b)
+                    w_rew[b].append(rew_b)
+                    w_term[b].append(term_b)
+                    w_next[b].append(next_b)
+                    w_ret[b] += float(rewards[b])
+                if done_b or is_trunc:
+                    if recurrent:
+                        # reset this worker's recurrent state for the next episode.
+                        # internal state tensors are (num_layers, N, H): worker b
+                        # lives on the batch dim (1), not the layer dim (0).
+                        prev_action[b] = 0.0
+                        reward[b] = 0.0
+                        if isinstance(internal, tuple):
+                            for s in internal:
+                                s[:, b, :] = 0.0
+                        else:
+                            internal[:, b, :] = 0.0
+                    finished.append(b)
+                    collected += 1
+
+            # 4) push finished episodes to the replay buffer (recurrent archs only)
+            if recurrent:
+                for b in finished:
+                    obs_arr = torch.cat(w_obs[b], dim=0)  # (L, dim)
+                    act_arr = torch.cat(w_act[b], dim=0)
+                    if not self.act_continuous:
+                        act_arr = torch.argmax(act_arr, dim=-1, keepdims=True)  # (L, 1)
+                    rew_arr = torch.cat(w_rew[b], dim=0)
+                    term_arr = _np.array(w_term[b], dtype=float).reshape(-1, 1)
+                    next_arr = torch.cat(w_next[b], dim=0)
+                    if len(w_obs[b]) < 2:  # degenerate 1-step episode: pad (masked out at sample)
+                        obs_arr = torch.cat([obs_arr, obs_arr[-1:]], dim=0)
+                        act_arr = torch.cat([act_arr, act_arr[-1:]], dim=0)
+                        rew_arr = torch.cat([rew_arr, rew_arr[-1:]], dim=0)
+                        term_arr = _np.concatenate([term_arr, _np.zeros((1, 1), dtype=float)])
+                        next_arr = torch.cat([next_arr, next_arr[-1:]], dim=0)
+                    self.policy_storage.add_episode(
+                        observations=ptu.get_numpy(obs_arr),
+                        actions=ptu.get_numpy(act_arr),
+                        rewards=ptu.get_numpy(rew_arr),
+                        terminals=term_arr,
+                        next_observations=ptu.get_numpy(next_arr),
+                    )
+                    print(f"steps: {len(w_obs[b])} term: {w_term[b][-1]} ret: {w_ret[b]:.2f}")
+                    w_obs[b] = []; w_act[b] = []; w_rew[b] = []; w_term[b] = []
+                    w_next[b] = []; w_ret[b] = 0.0
+
+            # 5) advance observations for the next step (auto-reset workers now fresh)
+            cur_obs = cur_next
+
+            self._n_env_steps_total += N
+            self._n_rollouts_total += len(finished)
 
         logger.record_tabular("merge/crashrate", crashes / num_rollouts)
         logger.record_tabular("merge/mergerate", merges / num_rollouts)
@@ -647,6 +930,13 @@ class Learner:
         total_affected_radars_data = []
         ego_positions = []
 
+        ttm_values = []
+
+        # CSV logging of per-step radar interference flags (only when log=True)
+        radar_csv_file = None
+        radar_csv_writer = None
+        radar_csv_path = None
+
         if log:
             tasks = tqdm(tasks)
 
@@ -703,6 +993,28 @@ class Learner:
                     speed += info["average_speed"]
                     road_speed += info["average_road_speed"]
 
+                    # log which radars perceive interference this timestep to CSV
+                    if log and "radars_affected_for_whole_timestep" in info:
+                        radars = info["radars_affected_for_whole_timestep"]
+                        if radar_csv_writer is None:
+                            # open lazily so the header matches the real radar count
+                            radar_csv_path = os.path.join(
+                                logger.get_dir(), "radar_interference.csv"
+                            )
+                            radar_csv_file = open(radar_csv_path, "w", newline="")
+                            radar_csv_writer = csv.writer(radar_csv_file)
+                            radar_csv_writer.writerow(
+                                [
+                                    "task_idx",
+                                    "episode_idx",
+                                    "step",
+                                    *[f"radar_{r}" for r in range(len(radars))],
+                                ]
+                            )
+                        radar_csv_writer.writerow(
+                            [task_idx, episode_idx, i, *radars.astype(int)]
+                        )
+
                     # total_affected_radars_data.append(
                     #     self.eval_env.unwrapped.observation_type.affected_radars_data
                     # )
@@ -736,6 +1048,8 @@ class Learner:
 
                     elif "merged" in info and info["merged"] == True and done_rollout:
                         merges += 1
+                        if np.isfinite(float(info["time_to_merge"])):
+                            ttm_values.append(float(info["time_to_merge"]))
 
                     if done_rollout:
                         if log:
@@ -758,6 +1072,9 @@ class Learner:
 
         # with open(f"ego_positions.npy", "wb") as f:
         #     np.save(f, ego_positions)
+        if radar_csv_file is not None:
+            radar_csv_file.close()
+            print(f"Saved radar interference log to {radar_csv_path}")
         print(f"Total merges: {merges}")
         print(f"Total crashes: {crashes}")
         print(f"Total episodes: {task_idx}")
@@ -765,6 +1082,7 @@ class Learner:
         print(f"Ego speed: {speed/total_steps.sum()}")
         print(f"Road speed: {road_speed/total_steps.sum()}")
         print(f"Average Reward: {total_reward/task_idx}")
+        print(f"Average time to merge {sum(ttm_values)/task_idx:.3f}")
 
         print(f"Took {time.time() - start}")
         return returns_per_episode, success_rate, observations, total_steps

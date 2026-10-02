@@ -8,7 +8,6 @@ import torch
 
 from ruamel.yaml import YAML
 
-# from absl import flags
 from utils import system, logger
 from pathlib import Path
 import psutil
@@ -17,54 +16,19 @@ from torchkit.pytorch_utils import set_gpu_mode
 from policies.learner import Learner
 
 import hydra
-from hydra.utils import get_original_cwd, to_absolute_path
+from hydra.utils import to_absolute_path
 import omegaconf
 import wandb
 
-# FLAGS = flags.FLAGS
-# flags.DEFINE_string("cfg", None, "path to configuration file")
-# flags.DEFINE_string("env", None, "env_name")
-# flags.DEFINE_string("algo", None, '["td3", "sac", "sacd"]')
-#
-# flags.DEFINE_boolean("automatic_entropy_tuning", None, "for [sac, sacd]")
-# flags.DEFINE_float("target_entropy", None, "for [sac, sacd]")
-# flags.DEFINE_float("entropy_alpha", None, "for [sac, sacd]")
-#
-# flags.DEFINE_integer("seed", None, "seed")
-# flags.DEFINE_integer("cuda", None, "cuda device id")
-# flags.DEFINE_boolean("debug", False, "debug mode")
-#
-# flags.FLAGS(sys.argv)
 yaml = YAML()
-#
-
 
 @hydra.main(version_base="1.1", config_path="..", config_name="config")
 def main(cfg: "DictConfig"):  # noqa: F821
-    # v = yaml.load(open(FLAGS.cfg))
-
-    # overwrite config params
-    # if FLAGS.env is not None:
-    #     v["env"]["env_name"] = FLAGS.env
-    # if FLAGS.algo is not None:
-    #     v["policy"]["algo_name"] = FLAGS.algo
 
     print(cfg)
     seq_model, algo = cfg.policy.seq_model, cfg.policy.algo_name
     assert seq_model in ["mlp", "lstm", "gru", "lstm-mlp", "gru-mlp"]
     assert algo in ["td3", "sac", "sacd"]
-
-    # if FLAGS.automatic_entropy_tuning is not None:
-    #     v["policy"][algo]["automatic_entropy_tuning"] = FLAGS.automatic_entropy_tuning
-    # if FLAGS.entropy_alpha is not None:
-    #     v["policy"][algo]["entropy_alpha"] = FLAGS.entropy_alpha
-    # if FLAGS.target_entropy is not None:
-    #     v["policy"][algo]["target_entropy"] = FLAGS.target_entropy
-
-    # if FLAGS.seed is not None:
-    #     v["seed"] = FLAGS.seed
-    # if FLAGS.cuda is not None:
-    #     v["cuda"] = FLAGS.cuda
 
     # system: device, threads, seed, pid
     seed = cfg.seed
@@ -75,16 +39,10 @@ def main(cfg: "DictConfig"):  # noqa: F821
     torch.set_printoptions(precision=3, sci_mode=False)
 
     pid = str(os.getpid())
-    # if "SLURM_JOB_ID" in os.environ:
-    #     pid += "_" + str(os.environ["SLURM_JOB_ID"])  # use job id
 
     # set gpu
     set_gpu_mode(torch.cuda.is_available() and cfg.cuda >= 0, cfg.cuda)
 
-    # logs
-    # if FLAGS.debug:
-    #     exp_id = "debug/"
-    # else:
     exp_id = f"{to_absolute_path('logs')}/"
 
     env_type = cfg.env.env_type
@@ -123,9 +81,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
     if seq_model != "mlp":
         exp_id += f"len-{cfg.train.sampled_seq_len}/bs-{cfg.train.batch_size}/"
-        # exp_id += f"baseline-{cfg.train.sample_weight_baseline}/"
         exp_id += f"freq-{cfg.train.num_updates_per_iter}/"
-        # assert v["policy"]["observ_embedding_size"] > 0
         policy_input_str = "o"
         if cfg.policy.action_embedding_size > 0:
             policy_input_str += "a"
@@ -174,8 +130,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
         artifact.wait()
     
     yaml.dump(v, Path(f"{log_folder}/variant_{pid}.yml"))
-    # key_flags = FLAGS.get_key_flags_for_module(sys.argv[0])
-    # logger.log("\n".join(f.serialize() for f in key_flags) + "\n")
     logger.log("pid", pid, socket.gethostname())
     os.makedirs(os.path.join(logger.get_dir(), "save"))
 

@@ -32,9 +32,6 @@ class SingleAgentMergeEnv(AbstractEnv):
             {
                 "duration": 15,  # time step
                 "policy_frequency": 5,  # [Hz]
-                "merging_speed_reward": -0.5,
-                "right_lane_reward": 0.1,
-                "lane_change_reward": -0.05,
                 "reward_speed_range": [10, 30],
                 "collision_reward": 200,
                 "high_speed_reward": 3,

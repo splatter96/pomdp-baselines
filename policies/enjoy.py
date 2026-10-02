@@ -142,8 +142,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
     yaml.dump(v, Path(f"{log_folder}/variant_{pid}.yml"))
     # key_flags = FLAGS.get_key_flags_for_module(sys.argv[0])
     # logger.log("\n".join(f.serialize() for f in key_flags) + "\n")
-    logger.log("pid", pid, socket.gethostname())
-    os.makedirs(os.path.join(logger.get_dir(), "save"))
+    #logger.log("pid", pid, socket.gethostname())
+    #os.makedirs(os.path.join(logger.get_dir(), "save"))
 
     # start training
     learner = Learner(
