@@ -33,6 +33,14 @@ env:
   traffic_density: 3
   dutycycle: 14
   hdv_driving_style: "nominal"
+
+  # Optional time-dependence for Markov (non-recurrent) policies: stack the last
+  # K raw observations into one observation (gymnasium FrameStack style).
+  #   1 = disabled -> original single-frame behavior, fully bit-identical.
+  #   >1 = obs becomes (K, 18, 2) -> flattened to K*36 dims; pairs with seq_model: mlp.
+  # NOTE: K>1 checkpoints are shape-incompatible with K=1 (different obs_dim).
+  num_frame_stack: 10
+
   observation:
     type: LidarObservation
     enable_interference: true
@@ -69,7 +77,8 @@ eval:
 
 policy:
   separate: true
-  seq_model: lstm # [lstm, gru]
+  #seq_model: lstm # [lstm, gru]
+  seq_model: mlp # [lstm, gru]
   algo_name: sacd # only support sac-discrete
 
   action_embedding_size: 8 # no action input

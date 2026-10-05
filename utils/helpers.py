@@ -48,28 +48,31 @@ def env_step(env, action, render=False):
     action = ptu.get_numpy(action)
     if env.action_space.__class__.__name__ == "Discrete":
         action = np.argmax(action)  # one-hot to int
-    next_obs, reward, done, _, info = env.step(action)
 
-    ACTIONS_ALL = {
-        0: 'LANE_LEFT',
-        1: 'IDLE',
-        2: 'LANE_RIGHT',
-        3: 'FASTER',
-        4: 'SLOWER'
-    }
+    # start = time.time()
+    next_obs, reward, done, _, info = env.step(action)
+    # end = time.time()
+    # print(f"Step took {end-start}s")
+
+    ACTIONS_ALL = {0: "LANE_LEFT", 1: "IDLE", 2: "LANE_RIGHT", 3: "FASTER", 4: "SLOWER"}
 
     if render:
         # print(env.unwrapped.observation_type.affected_radars_data)
         # print(env.unwrapped.controlled_vehicles[0].target_speed)
         # print(env.unwrapped.controlled_vehicles[0].speed)
-        print(ACTIONS_ALL[action])
+        # print(next_obs)
+        # print(ACTIONS_ALL[action])
         # print(env.unwrapped.controlled_vehicles[0].target_lane_index)
-        print()
+        # print()
+        # print(next_obs[-2][0])
+        # print(next_obs[-2][1])
+        # print(next_obs)
         env.render()
         time.sleep(0.2)
 
     # TODO add more general observation preprocessor
-    next_obs = next_obs.flatten()
+    # With FrameStack `next_obs` is a LazyFrames (no .flatten()); materialize it first.
+    next_obs = np.asarray(next_obs).flatten()
 
     # move to torch
     next_obs = ptu.from_numpy(next_obs).view(-1, next_obs.shape[0])

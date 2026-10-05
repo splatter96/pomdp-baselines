@@ -227,7 +227,7 @@ class WandbOutputFormat(KVWriter):
     def __init__(self, dir, config):
         self.step = 0
         wandb.init(
-            project="pomdp_interference",
+            project="pomdp_resubmission",
             config=config,
             name=dir,
             save_code=True,

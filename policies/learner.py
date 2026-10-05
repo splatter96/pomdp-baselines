@@ -15,6 +15,7 @@ from hydra.utils import get_original_cwd, to_absolute_path
 
 # import gym
 import gymnasium as gym
+from gymnasium.wrappers import FrameStack
 
 from .models import AGENT_CLASSES, AGENT_ARCHS
 from torchkit.networks import ImageEncoder
@@ -59,6 +60,7 @@ class Learner:
         num_eval_tasks=None,
         eval_envs=None,
         worst_percentile=None,
+        num_frame_stack=1,
         **kwargs,
     ):
         # initialize environment
@@ -72,6 +74,10 @@ class Learner:
         ]
         self.env_type = env_type
         self.env_args = kwargs
+
+        # Number of raw observations stacked over time (FrameStack). 1 = disabled,
+        # which preserves the original single-frame behavior exactly.
+        self.num_frame_stack = max(1, int(num_frame_stack))
 
         # keep the *un-split* env id for (re)building envs, e.g. the vector rollout env
         # (main.py may pass a hyphen-joined id such as "merge-single-agent-v0")
@@ -92,6 +98,17 @@ class Learner:
             self.train_env = gym.make(env_name, config=kwargs)
             if "merge" in env_name:
                 self.train_env.config.update(kwargs)
+            # Capture the episode horizon (TimeLimit) BEFORE any observation wrapper is
+            # applied. _max_episode_steps is a *private* instance attr of the TimeLimit
+            # wrapper (not of the raw env), and gym.Wrapper refuses to proxy
+            # underscore-prefixed names, so it cannot be read off a FrameStack-wrapped env.
+            self.max_trajectory_len = self.train_env._max_episode_steps
+            # Optional time-dependence via frame stacking. Wrapped after the raw env is
+            # fully configured. gymnasium's FrameStack keeps the env's dtype and exposes
+            # a stacked observation_space of shape (num_frame_stack, ...) for a 2-D Box.
+            if self.num_frame_stack > 1:
+                self.train_env = FrameStack(self.train_env, self.num_frame_stack)
+                logger.log("FrameStack applied, num_frame_stack", self.num_frame_stack)
             self.train_env.reset(seed=self.seed)
             self.train_env.action_space.seed(self.seed)  # crucial
 
@@ -105,7 +122,6 @@ class Learner:
             self.eval_tasks = num_eval_tasks * [None]
 
             self.max_rollouts_per_task = 1
-            self.max_trajectory_len = self.train_env._max_episode_steps
 
             # NOTE: self.train_env is deliberately NOT vectorized here — it is aliased to
             # self.eval_env and `evaluate`/`evaluate_parallel` step it directly. Rollout
@@ -141,12 +157,10 @@ class Learner:
             self.act_dim = self.train_env.action_space.n
             self.act_continuous = False
 
-        # TODO account for not flattened observations
+        # Dimension-agnostic: with FrameStack the obs space is 3-D (k, H, W), so take
+        # the product of all dims (== H*W for the original 2-D case, k*H*W stacked).
         obs_space = self.train_env.observation_space.shape
-        if len(obs_space) == 2:
-            self.obs_dim = obs_space[0] * obs_space[1]
-        else:
-            self.obs_dim = obs_space[0]
+        self.obs_dim = int(np.prod(obs_space))
 
         logger.log("obs_dim", self.obs_dim, "act_dim", self.act_dim)
 
@@ -391,8 +405,9 @@ class Learner:
             steps = 0
 
 
-            obs = ptu.from_numpy(self.train_env.reset()[0])  # reset
-
+            # reset. With FrameStack this is a LazyFrames, so materialize it with
+            # np.asarray before torch.from_numpy (LazyFrames has no .flatten()).
+            obs = ptu.from_numpy(np.asarray(self.train_env.reset()[0]))
 
             # TODO create more universal preprocessor for observations
             obs = obs.flatten()
@@ -528,9 +543,11 @@ class Learner:
         """
         env_name = self._env_name
         env_args = dict(self.env_args)
+        num_frame_stack = self.num_frame_stack  # captured as a plain int (picklable)
 
         def make_env():
             import gymnasium as gym
+            from gymnasium.wrappers import FrameStack
             import os as _os
             import sys as _sys
 
@@ -545,6 +562,9 @@ class Learner:
             # mirror the merge special-case from init_env (no-op for kwargs already passed)
             if "merge" in env_name:
                 env.config.update(env_args)
+            # mirror init_env: apply the same frame-stacking wrapper in each worker
+            if num_frame_stack > 1:
+                env = FrameStack(env, num_frame_stack)
             return env
 
         return make_env
@@ -818,15 +838,21 @@ class Learner:
             road_speed = 0
             step = 0
 
-            num_steps_per_episode = self.eval_env._max_episode_steps
-            initial_veh = deepcopy(self.eval_env.road.vehicles)
+            num_steps_per_episode = self.max_trajectory_len
+            initial_veh = deepcopy(self.eval_env.unwrapped.road.vehicles)
 
-            obs = ptu.from_numpy(self.eval_env.reset()[0])  # reset
+            obs = ptu.from_numpy(np.asarray(self.eval_env.reset()[0]))  # reset
             obs = obs.flatten()
             obs = obs.reshape(1, obs.shape[-1])
 
-            obs = self.eval_env.observation_type.t = 0
-            obs = self.eval_env.observation_type.observe()
+            # Re-observe at t=0 on the UNWRAPPED env (FrameStack does not expose
+            # observation_type) and tile it to num_frame_stack copies so the policy sees
+            # the stacked shape at episode start (matches FrameStack.reset's fill).
+            obs = self.eval_env.unwrapped.observation_type.t = 0
+            obs = self.eval_env.unwrapped.observation_type.observe()
+            obs = np.asarray(obs)
+            if self.num_frame_stack > 1:
+                obs = np.repeat(obs[None, :], self.num_frame_stack, axis=0)
             obs = ptu.from_numpy(obs)
             obs = obs.flatten()
             obs = obs.reshape(1, obs.shape[-1])
@@ -919,7 +945,7 @@ class Learner:
         crashes = 0
         merges = 0
 
-        num_steps_per_episode = self.eval_env._max_episode_steps
+        num_steps_per_episode = self.max_trajectory_len
         observations = None
 
         speed = 0
@@ -971,10 +997,10 @@ class Learner:
             step = 0
             episode_reward = 0
 
-            obs = ptu.from_numpy(self.eval_env.reset()[0])  # reset
+            obs = ptu.from_numpy(np.asarray(self.eval_env.reset()[0]))  # reset
             obs = obs.flatten()
             obs = obs.reshape(1, obs.shape[-1])
-            initial_veh = deepcopy(self.eval_env.road.vehicles)
+            initial_veh = deepcopy(self.eval_env.unwrapped.road.vehicles)
 
             affected_radars_episode = []
 
@@ -998,9 +1024,15 @@ class Learner:
             #     self.eval_env.road.vehicles = pickle.load(f)
             #     self.eval_env.set_vehicle(self.eval_env.road.vehicles[0])
             # Need to reobserv when setting the initial state, as
-            # the old observation was from the old initial state
-            obs = self.eval_env.observation_type.t = 0
-            obs = self.eval_env.observation_type.observe()
+            # the old observation was from the old initial state.
+            # Re-observe at t=0 on the UNWRAPPED env (FrameStack does not expose
+            # observation_type) and tile to num_frame_stack copies so the policy sees
+            # the stacked shape at episode start (matches FrameStack.reset's fill).
+            obs = self.eval_env.unwrapped.observation_type.t = 0
+            obs = self.eval_env.unwrapped.observation_type.observe()
+            obs = np.asarray(obs)
+            if self.num_frame_stack > 1:
+                obs = np.repeat(obs[None, :], self.num_frame_stack, axis=0)
             obs = ptu.from_numpy(obs)
             obs = obs.flatten()
             obs = obs.reshape(1, obs.shape[-1])
