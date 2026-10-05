@@ -911,7 +911,7 @@ class Learner:
             print(f"Took {time.time()-start}")
 
     @torch.no_grad()
-    def evaluate(self, tasks, deterministic=True, render=False, log=False):
+    def evaluate(self, tasks, deterministic=True, render=False, log=False, metrics_dir=None):
         num_episodes = self.max_rollouts_per_task  # k
         returns_per_episode = np.zeros((len(tasks), num_episodes))
         success_rate = np.zeros(len(tasks))
@@ -938,6 +938,32 @@ class Learner:
         radar_csv_path = None
 
         if log:
+            # Step-wise TTC values over the complete evaluation. These are kept for
+            # distribution plots and threshold-based statistics.
+            ttc_current_front_values = []
+            ttc_target_front_values = []
+            ttc_target_rear_values = []
+
+            # Episode-wise minimum TTC values. One value is stored per evaluation
+            # episode and interaction type. np.inf is preserved if no closing conflict
+            # occurred for that interaction type during the episode.
+            episode_min_ttc_current_front = []
+            episode_min_ttc_target_front = []
+            episode_min_ttc_target_rear = []
+
+            # Accepted merge gaps measured by the environment at merge initiation and
+            # reported once the merge is successfully completed. We store one value per
+            # episode; unsuccessful episodes remain np.nan. This keeps the values aligned
+            # with the evaluation episodes and allows np.nanmedian()/percentiles later.
+            accepted_merge_gap_front = []
+            accepted_merge_gap_rear = []
+            successful_merge_flags = []
+
+            crashed_flags = []
+
+            os.makedirs(metrics_dir, exist_ok=True)
+
+        if log:
             tasks = tqdm(tasks)
 
         start = time.time()
@@ -951,6 +977,22 @@ class Learner:
             initial_veh = deepcopy(self.eval_env.road.vehicles)
 
             affected_radars_episode = []
+
+            crashed = False
+
+            if log:
+                # Per-episode TTC traces are used to compute the minimum TTC for each of
+                # the three relevant interaction partners.
+                episode_ttc_current_front = []
+                episode_ttc_target_front = []
+                episode_ttc_target_rear = []
+
+                # The environment reports the accepted gap only after a successful merge,
+                # but the stored values correspond to the instant at which the merge was
+                # initiated. Keep np.nan if no successful merge occurs in this episode.
+                episode_merge_gap_front = np.nan
+                episode_merge_gap_rear = np.nan
+                episode_merged = False
 
             # with open("initial_veh191.pkl", "rb") as f:
             #     self.eval_env.road.vehicles = pickle.load(f)
@@ -993,13 +1035,44 @@ class Learner:
                     speed += info["average_speed"]
                     road_speed += info["average_road_speed"]
 
+                    if log:
+                        # Collect TTC metrics for every simulation step over the complete
+                        # evaluation. The environment reports np.inf when no closing
+                        # conflict exists, and those values are preserved in the files.
+                        ttc_current = float(info["ttc_current_front"])
+                        ttc_target_front = float(info["ttc_target_front"])
+                        ttc_target_rear = float(info["ttc_target_rear"])
+
+                        ttc_current_front_values.append(ttc_current)
+                        ttc_target_front_values.append(ttc_target_front)
+                        ttc_target_rear_values.append(ttc_target_rear)
+
+                        episode_ttc_current_front.append(ttc_current)
+                        episode_ttc_target_front.append(ttc_target_front)
+                        episode_ttc_target_rear.append(ttc_target_rear)
+
+                    # In the modified environment these fields become available on the
+                    # step on which a successful merge is first detected. The gap itself
+                    # was captured earlier, at the first LANE_LEFT action on the parallel
+                    # on-ramp section. Capture it here before later steps overwrite the
+                    # info values with np.nan again.
+                    if log and info.get("merged_now", False):
+                        episode_merge_gap_front = float(
+                            info.get("accepted_merge_gap_front", np.nan)
+                        )
+                        episode_merge_gap_rear = float(
+                            info.get("accepted_merge_gap_rear", np.nan)
+                        )
+                        episode_merged = True
+
+
                     # log which radars perceive interference this timestep to CSV
                     if log and "radars_affected_for_whole_timestep" in info:
                         radars = info["radars_affected_for_whole_timestep"]
                         if radar_csv_writer is None:
                             # open lazily so the header matches the real radar count
                             radar_csv_path = os.path.join(
-                                logger.get_dir(), "radar_interference.csv"
+                                metrics_dir, "radar_interference.csv"
                             )
                             radar_csv_file = open(radar_csv_path, "w", newline="")
                             radar_csv_writer = csv.writer(radar_csv_file)
@@ -1045,6 +1118,7 @@ class Learner:
 
                         # with open(f"random_state{task_idx}.pkl", "wb") as f:
                         #     pickle.dump(np.random.get_state(), f)
+                        crashed = True
 
                     elif "merged" in info and info["merged"] == True and done_rollout:
                         merges += 1
@@ -1062,6 +1136,32 @@ class Learner:
                         break
 
                 returns_per_episode[task_idx, episode_idx] = running_reward
+                if log:
+                    # Store episode-level safety metrics before processing the terminal
+                    # outcome. Each minimum is taken over all simulation steps in the episode.
+                    # np.inf remains meaningful here: it denotes that no closing TTC conflict
+                    # occurred for that interaction type during the complete episode.
+                    episode_min_ttc_current_front.append(
+                        float(np.min(episode_ttc_current_front))
+                        if episode_ttc_current_front
+                        else np.inf
+                    )
+                    episode_min_ttc_target_front.append(
+                        float(np.min(episode_ttc_target_front))
+                        if episode_ttc_target_front
+                        else np.inf
+                    )
+                    episode_min_ttc_target_rear.append(
+                        float(np.min(episode_ttc_target_rear))
+                        if episode_ttc_target_rear
+                        else np.inf
+                    )
+
+                    accepted_merge_gap_front.append(float(episode_merge_gap_front))
+                    accepted_merge_gap_rear.append(float(episode_merge_gap_rear))
+                    successful_merge_flags.append(bool(episode_merged))
+                    crashed_flags.append(bool(crashed))
+
             total_steps[task_idx] = step
 
             # with open(
@@ -1075,6 +1175,75 @@ class Learner:
         if radar_csv_file is not None:
             radar_csv_file.close()
             print(f"Saved radar interference log to {radar_csv_path}")
+
+        if log:
+
+            np.save(
+                os.path.join(metrics_dir, "ttc_current_front.npy"),
+                np.asarray(ttc_current_front_values, dtype=float),
+            )
+            np.save(
+                os.path.join(metrics_dir, "ttc_target_front.npy"),
+                np.asarray(ttc_target_front_values, dtype=float),
+            )
+            np.save(
+                os.path.join(metrics_dir, "ttc_target_rear.npy"),
+                np.asarray(ttc_target_rear_values, dtype=float),
+            )
+
+            # Episode-wise minimum TTC values used for the safety-margin table and the
+            # episode-level TTC distribution figure.
+            np.save(
+                os.path.join(metrics_dir, "episode_min_ttc_current_front.npy"),
+                np.asarray(episode_min_ttc_current_front, dtype=float),
+            )
+            np.save(
+                os.path.join(metrics_dir, "episode_min_ttc_target_front.npy"),
+                np.asarray(episode_min_ttc_target_front, dtype=float),
+            )
+            np.save(
+                os.path.join(metrics_dir, "episode_min_ttc_target_rear.npy"),
+                np.asarray(episode_min_ttc_target_rear, dtype=float),
+            )
+
+            # One entry per episode. Failed/non-completed merges are represented by
+            # np.nan, so the accepted-gap statistics can later be computed directly with
+            # np.nanmedian, np.nanpercentile, etc. The Boolean flag preserves which
+            # episodes actually completed a merge.
+            np.save(
+                os.path.join(metrics_dir, "accepted_merge_gap_front.npy"),
+                np.asarray(accepted_merge_gap_front, dtype=float),
+            )
+            np.save(
+                os.path.join(metrics_dir, "accepted_merge_gap_rear.npy"),
+                np.asarray(accepted_merge_gap_rear, dtype=float),
+            )
+            np.save(
+                os.path.join(metrics_dir, "successful_merge.npy"),
+                np.asarray(successful_merge_flags, dtype=bool),
+            )
+
+            # Convenience archive containing all safety-margin data in one file.
+            np.savez(
+                os.path.join(metrics_dir, "safety_margin_metrics.npz"),
+                ttc_current_front=np.asarray(ttc_current_front_values, dtype=float),
+                ttc_target_front=np.asarray(ttc_target_front_values, dtype=float),
+                ttc_target_rear=np.asarray(ttc_target_rear_values, dtype=float),
+                episode_min_ttc_current_front=np.asarray(
+                    episode_min_ttc_current_front, dtype=float
+                ),
+                episode_min_ttc_target_front=np.asarray(
+                    episode_min_ttc_target_front, dtype=float
+                ),
+                episode_min_ttc_target_rear=np.asarray(
+                    episode_min_ttc_target_rear, dtype=float
+                ),
+                accepted_merge_gap_front=np.asarray(accepted_merge_gap_front, dtype=float),
+                accepted_merge_gap_rear=np.asarray(accepted_merge_gap_rear, dtype=float),
+                successful_merge=np.asarray(successful_merge_flags, dtype=bool),
+                crashes=np.asarray(crashed_flags, dtype=bool),
+            )
+
         print(f"Total merges: {merges}")
         print(f"Total crashes: {crashes}")
         print(f"Total episodes: {task_idx}")
@@ -1172,8 +1341,8 @@ class Learner:
         # reward = ptu.FloatTensor([0])
         # export model to onnx
 
-    def enjoy(self, chkpt_path, render, num_runs):
+    def enjoy(self, chkpt_path, render, num_runs, metrics_dir):
         self.load_model(chkpt_path)
 
-        self.evaluate(num_runs * [None], deterministic=True, render=render, log=True)
+        self.evaluate(num_runs * [None], deterministic=True, render=render, log=True, metrics_dir=metrics_dir)
         # self.evaluate_parallel(num_runs * [None], deterministic=True, render=render, log=True)

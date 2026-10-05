@@ -62,9 +62,8 @@ yaml = YAML()
 @hydra.main(version_base="1.1", config_path="..", config_name="config")
 def main(cfg: "DictConfig"):  # noqa: F821
     # USE SAME SEED FOR ALL EVALUATION RUNS
-    seed = 21
-    # seed = v["seed"]
-    system.reproduce(seed)
+    #seed = 21
+    system.reproduce(cfg.seed)
 
     torch.set_num_threads(1)
     np.set_printoptions(precision=3, suppress=True)
@@ -151,7 +150,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         train_args=v["train"],
         eval_args=v["eval"],
         policy_args=v["policy"],
-        seed=seed,
+        seed=cfg.seed,
     )
 
     logger.log(
@@ -160,7 +159,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
     print(f"config {cfg}")
     if cfg.chkpt_path is not None:
-        learner.enjoy(cfg.chkpt_path, cfg.render, cfg.num_runs)
+        learner.enjoy(cfg.chkpt_path, cfg.render, cfg.num_runs, cfg.metrics_dir)
 
 
 if __name__ == "__main__":

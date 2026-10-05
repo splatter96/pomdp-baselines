@@ -61,7 +61,8 @@ def median_iqr(values):
 def format_median_iqr(median, q25, q75):
     if not np.all(np.isfinite([median, q25, q75])):
         return "n/a"
-    return f"{median:.3f} [{q25:.3f}, {q75:.3f}]"
+    #return f"{median:.3f} [{q25:.3f}, {q75:.3f}]"
+    return f"{median:.3f} \\\\ \mbox[{q25:.3f}, {q75:.3f}]"
 
 
 def require_keys(data, keys):
@@ -199,17 +200,25 @@ def main():
             merge_rate = float(np.mean(successful_merge))
             print(f"\nMerge rate: {merge_rate:.3f}")
 
+    if "crashes" in data:
+        crashes = np.asarray(data["crashes"], dtype=bool)
+        if crashes.size > 0:
+            crash_rate = float(np.mean(crashes))
+            print(f"\nCollision rate: {crash_rate:.3f}")
+
     # A compact row that can be copied into the LaTeX table.
     print("\nLaTeX-ready safety-margin cells:")
-    print(
-        " & ".join(
+    print("& " + 
+        "\n& ".join(
             [
-                format_median_iqr(*ttc_cf[:3]),
-                format_median_iqr(*ttc_tf[:3]),
-                format_median_iqr(*ttc_tr[:3]),
+                f"{crash_rate:.3f}",
+                f"{merge_rate:.3f}",
+                f"\makecell{{{format_median_iqr(*ttc_cf[:3])}}}",
+                f"\makecell{{{format_median_iqr(*ttc_tf[:3])}}}",
+                f"\makecell{{{format_median_iqr(*ttc_tr[:3])}}}",
                 f"{critical_step_percent:.3f}",
-                format_median_iqr(*front_gap[:3]),
-                format_median_iqr(*rear_gap[:3]),
+                f"\makecell{{{format_median_iqr(*front_gap[:3])}}}",
+                f"\makecell{{{format_median_iqr(*rear_gap[:3])}}}",
             ]
         )
     )
